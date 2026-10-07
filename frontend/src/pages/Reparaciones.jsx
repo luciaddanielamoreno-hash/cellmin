@@ -957,126 +957,166 @@ function FilaReparacion({
           )}
         </td>
         <td className="px-6 py-4">
-          <td className="px-6 py-4">
-            <div className="flex items-center gap-1 flex-wrap">
-              {reparacion.estado === "en_diagnostico" && (
-                <button
-                  onClick={() => onEditarTipos(reparacion)}
-                  className="px-2 py-1 text-xs bg-orange-50 text-orange-700 rounded-lg hover:bg-orange-100 transition"
-                >
-                  Definir
-                </button>
-              )}
-              {siguienteEstado && (
-                <button
-                  onClick={() =>
-                    onUpdate(reparacion.id, { estado: siguienteEstado })
-                  }
-                  className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition"
-                >
-                  → {ESTADOS_REP[siguienteEstado]?.label}
-                </button>
-              )}
-              {reparacion.precio_total > 0 &&
-                reparacion.saldo_pendiente > 0 &&
-                cajaAbierta && (
-                  <button
-                    onClick={() => onPago(reparacion)}
-                    className="px-2 py-1 text-xs bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition"
-                  >
-                    Cobrar
-                  </button>
-                )}
-              {reparacion.precio_total > 0 &&
-                reparacion.saldo_pendiente > 0 &&
-                !cajaAbierta &&
-                userRol !== "tecnico" && (
-                  <span className="px-2 py-1 text-xs bg-gray-100 text-gray-400 rounded-lg cursor-not-allowed">
-                    Caja cerrada
-                  </span>
-                )}
-              {reparacion.estado !== "entregada" &&
-                reparacion.estado !== "cancelada" && (
-                  <button
-                    onClick={() => onCancelar(reparacion.id)}
-                    className="px-2 py-1 text-xs bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition"
-                  >
-                    Cancelar
-                  </button>
-                )}
+          <div className="flex items-center gap-1 flex-wrap">
+            {reparacion.estado === "en_diagnostico" && (
               <button
-                onClick={() => setExpandido(!expandido)}
-                className="p-1 text-gray-400 hover:text-gray-600"
+                onClick={() => onEditarTipos(reparacion)}
+                className="px-2 py-1 text-xs bg-orange-50 text-orange-700 rounded-lg hover:bg-orange-100 transition"
               >
-                {expandido ? (
-                  <ChevronUp size={16} />
-                ) : (
-                  <ChevronDown size={16} />
-                )}
+                Definir
               </button>
-            </div>
-          </td>
+            )}
+            {siguienteEstado && (
+              <button
+                onClick={() =>
+                  onUpdate(reparacion.id, { estado: siguienteEstado })
+                }
+                className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition"
+              >
+                → {ESTADOS_REP[siguienteEstado]?.label}
+              </button>
+            )}
+            {reparacion.precio_total > 0 &&
+              reparacion.saldo_pendiente > 0 &&
+              cajaAbierta && (
+                <button
+                  onClick={() => onPago(reparacion)}
+                  className="px-2 py-1 text-xs bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition"
+                >
+                  Cobrar
+                </button>
+              )}
+            {reparacion.precio_total > 0 &&
+              reparacion.saldo_pendiente > 0 &&
+              !cajaAbierta &&
+              userRol !== "tecnico" && (
+                <span className="px-2 py-1 text-xs bg-gray-100 text-gray-400 rounded-lg cursor-not-allowed">
+                  Caja cerrada
+                </span>
+              )}
+            {reparacion.estado !== "entregada" &&
+              reparacion.estado !== "cancelada" && (
+                <button
+                  onClick={() => onCancelar(reparacion.id)}
+                  className="px-2 py-1 text-xs bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition"
+                >
+                  Cancelar
+                </button>
+              )}
+            <button
+              onClick={() => setExpandido(!expandido)}
+              className="p-1 text-gray-400 hover:text-gray-600"
+            >
+              {expandido ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+          </div>
         </td>
       </tr>
 
       {expandido && (
         <tr>
-          <td className="px-6 py-4">
-            <div className="flex items-center gap-1 flex-wrap">
-              {reparacion.estado === "en_diagnostico" && (
-                <button
-                  onClick={() => onEditarTipos(reparacion)}
-                  className="px-2 py-1 text-xs bg-orange-50 text-orange-700 rounded-lg hover:bg-orange-100 transition"
-                >
-                  Definir
-                </button>
-              )}
-              {siguienteEstado && (
-                <button
-                  onClick={() =>
-                    onUpdate(reparacion.id, { estado: siguienteEstado })
-                  }
-                  className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition"
-                >
-                  → {ESTADOS_REP[siguienteEstado]?.label}
-                </button>
-              )}
-              {reparacion.precio_total > 0 &&
-                reparacion.saldo_pendiente > 0 &&
-                cajaAbierta && (
-                  <button
-                    onClick={() => onPago(reparacion)}
-                    className="px-2 py-1 text-xs bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition"
-                  >
-                    Cobrar
-                  </button>
-                )}
-              {reparacion.precio_total > 0 &&
-                reparacion.saldo_pendiente > 0 &&
-                !cajaAbierta &&
-                userRol !== "tecnico" && (
-                  <span className="px-2 py-1 text-xs bg-gray-100 text-gray-400 rounded-lg cursor-not-allowed">
-                    Caja cerrada
+          <td colSpan={7} className="px-6 pb-4 bg-gray-50">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+              <div className="bg-white rounded-xl p-4 space-y-2">
+                <p className="text-sm font-semibold text-gray-700">
+                  Detalle del equipo
+                </p>
+                <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                  <span>
+                    Marca: <strong>{reparacion.equipo?.marca}</strong>
                   </span>
+                  <span>
+                    Modelo: <strong>{reparacion.equipo?.modelo}</strong>
+                  </span>
+                  <span>
+                    IMEI: <strong>{reparacion.equipo?.imei || "-"}</strong>
+                  </span>
+                  <span>
+                    Garantía: <strong>{reparacion.garantia_dias} días</strong>
+                  </span>
+                </div>
+                {reparacion.equipo?.problema_descripcion && (
+                  <p className="text-xs text-gray-600">
+                    <strong>Problema:</strong>{" "}
+                    {reparacion.equipo.problema_descripcion}
+                  </p>
                 )}
-              {reparacion.estado !== "entregada" &&
-                reparacion.estado !== "cancelada" && (
-                  <button
-                    onClick={() => onCancelar(reparacion.id)}
-                    className="px-2 py-1 text-xs bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition"
-                  >
-                    Cancelar
-                  </button>
+                {reparacion.notas_internas && (
+                  <p className="text-xs text-gray-500 italic">
+                    Notas: {reparacion.notas_internas}
+                  </p>
                 )}
+                {reparacion.fecha_entrega && (
+                  <p className="text-xs text-gray-500">
+                    Entregado: {formatDateTime(reparacion.fecha_entrega)}
+                  </p>
+                )}
+                {reparacion.fecha_vencimiento_garantia && (
+                  <p className="text-xs text-green-600">
+                    Garantía hasta:{" "}
+                    {formatDateTime(reparacion.fecha_vencimiento_garantia)}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                {reparacion.tipos_reparacion?.length > 0 && (
+                  <div className="bg-white rounded-xl p-4">
+                    <p className="text-sm font-semibold text-gray-700 mb-2">
+                      Reparaciones
+                    </p>
+                    {reparacion.tipos_reparacion.map((t, i) => (
+                      <div
+                        key={i}
+                        className="flex justify-between text-xs text-gray-600 py-1 border-b border-gray-50"
+                      >
+                        <span>{t.nombre}</span>
+                        <span className="font-medium">
+                          {formatCurrency(t.precio)}
+                        </span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between text-sm font-bold mt-2">
+                      <span>Total</span>
+                      <span>{formatCurrency(reparacion.precio_total)}</span>
+                    </div>
+                  </div>
+                )}
+
+                {reparacion.pagos?.length > 0 && (
+                  <div className="bg-white rounded-xl p-4">
+                    <p className="text-sm font-semibold text-gray-700 mb-2">
+                      Pagos
+                    </p>
+                    {reparacion.pagos.map((p, i) => (
+                      <div
+                        key={i}
+                        className="flex justify-between text-xs text-gray-600 py-1"
+                      >
+                        <span>
+                          {p.tipo} — {p.metodo} — {formatDateTime(p.fecha)}
+                        </span>
+                        <span className="font-medium">
+                          {formatCurrency(p.monto)}
+                        </span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between text-xs font-bold border-t border-gray-100 pt-1 mt-1">
+                      <span>Total pagado</span>
+                      <span className="text-green-600">
+                        {formatCurrency(reparacion.total_pagado)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="mt-3 flex justify-end">
               <button
-                onClick={() => setExpandido(!expandido)}
-                className="p-1 text-gray-400 hover:text-gray-600"
+                onClick={() => onImprimir(reparacion)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 text-white rounded-lg text-xs hover:bg-gray-800 transition"
               >
-                {expandido ? (
-                  <ChevronUp size={16} />
-                ) : (
-                  <ChevronDown size={16} />
-                )}
+                🖨️ Imprimir orden
               </button>
             </div>
           </td>

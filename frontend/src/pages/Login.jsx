@@ -27,19 +27,21 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
       <div className="w-full max-w-md">
-        {/* Logo y título */}cellmin_logo.png
+        {/* Logo y título */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl overflow-hidden mb-4 mx-auto">
+          <div className="flex justify-center mb-4">
             <img
-              src="/"
+              src="/cellmin_logo.png"
               alt="Cellmin"
-              className="w-full h-full object-cover"
+              className="w-24 h-24 object-contain rounded-2xl"
+              onError={(e) => {
+                e.target.style.display = "none";
+              }}
             />
           </div>
           <h1 className="text-3xl font-bold text-white">Cellmin</h1>
           <p className="text-gray-400 mt-1">Sistema de Gestión</p>
         </div>
-
         {/* Card del formulario */}
         <div className="bg-gray-800 rounded-2xl p-8 shadow-xl">
           <h2 className="text-xl font-semibold text-white mb-6">

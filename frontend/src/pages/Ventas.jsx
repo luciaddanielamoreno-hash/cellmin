@@ -544,7 +544,7 @@ function FilaVenta({ venta, clientes, onCancel, onImprimir }) {
           <div className="flex items-center gap-2">
             {venta.estado === "completada" && (
               <button
-                onClick={() => onCancel(venta._id)}
+                onClick={() => onCancel(venta._id, venta.numero_venta)}
                 className="px-3 py-1 text-xs text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition"
               >
                 Cancelar
@@ -678,7 +678,7 @@ function CardVentaMobile({ venta, clientes, onCancel, onImprimir }) {
           <div className="flex items-center gap-2">
             {venta.estado === "completada" && (
               <button
-                onClick={() => onCancel(venta._id)}
+                onClick={() => onCancel(venta._id, venta.numero_venta)}
                 className="px-3 py-1 text-xs text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition"
               >
                 Cancelar
@@ -730,6 +730,30 @@ function CardVentaMobile({ venta, clientes, onCancel, onImprimir }) {
   );
 }
 
+function ModalConfirmar({ mensaje, onConfirmar, onCancelar }) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-6 space-y-4">
+        <p className="text-gray-800 font-medium text-center">{mensaje}</p>
+        <div className="flex gap-3">
+          <button
+            onClick={onCancelar}
+            className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-xl text-sm hover:bg-gray-50 transition"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirmar}
+            className="flex-1 py-2 bg-red-600 text-white rounded-xl text-sm hover:bg-red-700 transition"
+          >
+            Confirmar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Ventas() {
   const [ventas, setVentas] = useState([]);
   const [clientes, setClientes] = useState([]);
@@ -742,6 +766,9 @@ export default function Ventas() {
   const POR_PAGINA = 20;
   const [showTicket, setShowTicket] = useState(false);
   const [ventaImprimir, setVentaImprimir] = useState(null);
+  const [showConfirmar, setShowConfirmar] = useState(false);
+  const [ventaCancelarId, setVentaCancelarId] = useState(null);
+  const [ventaCancelarNumero, setVentaCancelarNumero] = useState(null);
 
   const [filtros, setFiltros] = useState({
     busqueda: "",
@@ -781,16 +808,13 @@ export default function Ventas() {
     setPaginaActual(1);
   }, [filtros]);
 
-  const handleCancel = async (id) => {
-    if (
-      !confirm(
-        "¿Estás segura de cancelar esta venta? El stock será restaurado.",
-      )
-    )
-      return;
+  const handleCancel = async () => {
     try {
-      await ventasService.cancel(id);
+      await ventasService.cancel(ventaCancelarId);
       toast.success("Venta cancelada y stock restaurado");
+      setShowConfirmar(false);
+      setVentaCancelarId(null);
+      setVentaCancelarNumero(null);
       fetchData();
     } catch (error) {
       toast.error("Error al cancelar la venta");
@@ -1107,7 +1131,11 @@ export default function Ventas() {
                     key={venta._id}
                     venta={venta}
                     clientes={clientes}
-                    onCancel={handleCancel}
+                    onCancel={(id, numero) => {
+                      setVentaCancelarId(id);
+                      setVentaCancelarNumero(numero);
+                      setShowConfirmar(true);
+                    }}
                     onImprimir={(v) => {
                       setVentaImprimir(v);
                       setShowTicket(true);
@@ -1125,7 +1153,11 @@ export default function Ventas() {
                 key={venta._id}
                 venta={venta}
                 clientes={clientes}
-                onCancel={handleCancel}
+                onCancel={(id, numero) => {
+                  setVentaCancelarId(id);
+                  setVentaCancelarNumero(numero);
+                  setShowConfirmar(true);
+                }}
                 onImprimir={(v) => {
                   setVentaImprimir(v);
                   setShowTicket(true);
@@ -1185,6 +1217,18 @@ export default function Ventas() {
             </button>
           </div>
         </div>
+      )}
+
+      {showConfirmar && (
+        <ModalConfirmar
+          mensaje={`¿Cancelar la venta ${ventaCancelarNumero}? El stock será restaurado.`}
+          onConfirmar={handleCancel}
+          onCancelar={() => {
+            setShowConfirmar(false);
+            setVentaCancelarId(null);
+            setVentaCancelarNumero(null);
+          }}
+        />
       )}
     </div>
   );

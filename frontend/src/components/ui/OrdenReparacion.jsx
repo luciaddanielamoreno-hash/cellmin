@@ -125,30 +125,49 @@ function generarHTML(reparacion, cliente, tipo) {
 
 export default function OrdenReparacion({ reparacion, cliente }) {
   const handlePrint = () => {
-    const contenido = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Orden ${reparacion.numero_orden}</title>
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { width: 80mm; }
-          @media print { @page { margin: 0; size: 80mm auto; } }
-        </style>
-      </head>
-      <body>
-        ${generarHTML(reparacion, cliente, "cliente")}
-        ${generarHTML(reparacion, cliente, "tecnico")}
-      </body>
-      </html>
-    `;
-    const ventana = window.open("", "_blank", "width=320,height=800");
-    ventana.document.write(contenido);
-    ventana.document.close();
-    ventana.focus();
-    ventana.print();
-    ventana.close();
+    const contenidoHTML = `
+    ${generarHTML(reparacion, cliente, "cliente")}
+    ${generarHTML(reparacion, cliente, "tecnico")}
+  `;
+
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { width: 80mm; }
+        @media print { @page { margin: 0; size: 80mm auto; } }
+      </style>
+    </head>
+    <body>${contenidoHTML}</body>
+    </html>
+  `);
+    doc.close();
+
+    const tituloOriginal = document.title;
+    document.title = `Orden_${reparacion.numero_orden}`;
+
+    setTimeout(() => {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+        document.title = tituloOriginal;
+      }, 1000);
+    }, 500);
   };
 
   const sucursal = SUCURSALES[reparacion.sucursal] || SUCURSALES.sucursal_1;

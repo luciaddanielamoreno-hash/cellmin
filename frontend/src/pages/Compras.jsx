@@ -275,7 +275,7 @@ function NuevaCompraModal({ onClose, onSave }) {
                 className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Seleccionar proveedor</option>
-                {filtered.map((p) => (
+                {proveedores.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.nombre}
                   </option>

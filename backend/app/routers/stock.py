@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from app.database import get_db
 from app.models.stock import StockMovement
 from app.utils.auth import get_current_user
@@ -37,44 +37,62 @@ async def get_stock_productos(current_user: dict = Depends(get_current_user)):
 async def create_movement(movement: StockMovement, current_user: dict = Depends(get_current_user)):
     check_permission(current_user["role"], "stock:create")
     db = get_db()
-    new_movement = {
+
+    # 1. Validar el tipo y la cantidad (el ajuste sí puede ser 0)
+    if movement.tipo not in ("entrada", "salida", "ajuste"):
+        raise HTTPException(status_code=400, detail="Tipo de movimiento inválido")
+    if movement.tipo == "ajuste":
+        if movement.cantidad < 0:
+            raise HTTPException(status_code=400, detail="El stock no puede ser negativo")
+    elif movement.cantidad <= 0:
+        raise HTTPException(status_code=400, detail="La cantidad debe ser mayor a 0")
+
+    # 2. Buscar el producto y su stock actual
+    producto = await db.productos.find_one({"_id": ObjectId(movement.producto_id)})
+    if not producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+    if movement.variante_nombre:
+        variante = next(
+            (v for v in producto.get("variantes", []) if v["nombre"] == movement.variante_nombre),
+            None,
+        )
+        if not variante:
+            raise HTTPException(status_code=404, detail="Variante no encontrada")
+        stock_actual = variante.get("stock_actual", 0)
+    else:
+        stock_actual = producto.get("stock_actual", 0)
+
+    # 3. Calcular el stock nuevo (una salida no puede dejarlo negativo)
+    if movement.tipo == "entrada":
+        nuevo_stock = stock_actual + movement.cantidad
+    elif movement.tipo == "salida":
+        if movement.cantidad > stock_actual:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Stock insuficiente. Disponible: {stock_actual}, a restar: {movement.cantidad}",
+            )
+        nuevo_stock = stock_actual - movement.cantidad
+    else:  # ajuste: la cantidad es el stock final
+        nuevo_stock = movement.cantidad
+
+    # 4. Actualizar el stock
+    if movement.variante_nombre:
+        await db.productos.update_one(
+            {"_id": ObjectId(movement.producto_id), "variantes.nombre": movement.variante_nombre},
+            {"$set": {"variantes.$.stock_actual": nuevo_stock}},
+        )
+    else:
+        await db.productos.update_one(
+            {"_id": ObjectId(movement.producto_id)},
+            {"$set": {"stock_actual": nuevo_stock}},
+        )
+
+    # 5. Recién ahora registrar el movimiento en el historial
+    await db.stock_movimientos.insert_one({
         **movement.dict(),
         "usuario_id": current_user["user_id"],
-        "fecha": datetime.utcnow()
-    }
-    await db.stock_movimientos.insert_one(new_movement)
-
-    producto = await db.productos.find_one({"_id": ObjectId(movement.producto_id)})
-    if producto:
-        if movement.variante_nombre:
-            variantes = producto.get("variantes", [])
-            for v in variantes:
-                if v["nombre"] == movement.variante_nombre:
-                    if movement.tipo == "entrada":
-                        v["stock_actual"] = v.get("stock_actual", 0) + movement.cantidad
-                    elif movement.tipo == "salida":
-                        v["stock_actual"] = v.get("stock_actual", 0) - movement.cantidad
-                    elif movement.tipo == "ajuste":
-                        v["stock_actual"] = movement.cantidad
-            await db.productos.update_one(
-                {"_id": ObjectId(movement.producto_id)},
-                {"$set": {"variantes": variantes}}
-            )
-        else:
-            if movement.tipo == "entrada":
-                await db.productos.update_one(
-                    {"_id": ObjectId(movement.producto_id)},
-                    {"$inc": {"stock_actual": movement.cantidad}}
-                )
-            elif movement.tipo == "salida":
-                await db.productos.update_one(
-                    {"_id": ObjectId(movement.producto_id)},
-                    {"$inc": {"stock_actual": -movement.cantidad}}
-                )
-            elif movement.tipo == "ajuste":
-                await db.productos.update_one(
-                    {"_id": ObjectId(movement.producto_id)},
-                    {"$set": {"stock_actual": movement.cantidad}}
-                )
+        "fecha": datetime.utcnow(),
+    })
 
     return {"message": "Movimiento registrado correctamente"}

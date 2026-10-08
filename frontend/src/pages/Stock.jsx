@@ -50,7 +50,9 @@ function MovimientoModal({ onClose, onSave }) {
       toast.success("Movimiento registrado");
       onSave();
     } catch (error) {
-      toast.error("Error al registrar movimiento");
+      toast.error(
+        error.response?.data?.detail || "Error al registrar movimiento",
+      );
     } finally {
       setLoading(false);
     }
@@ -129,7 +131,7 @@ function MovimientoModal({ onClose, onSave }) {
               <input
                 type="number"
                 required
-                min="1"
+                min={form.tipo === "ajuste" ? "0" : "1"}
                 value={form.cantidad}
                 onChange={(e) => setForm({ ...form, cantidad: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"

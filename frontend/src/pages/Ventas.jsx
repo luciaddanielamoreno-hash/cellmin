@@ -23,6 +23,8 @@ import {
 } from "../utils/helpers";
 import { useAuth } from "../context/AuthContext";
 import Paginacion from "../components/ui/Paginacion";
+import ThOrdenable from "../components/ui/ThOrdenable";
+import { useTabla } from "../hooks/useTabla";
 import TicketVenta from "../components/ui/TicketVenta";
 import DetalleVenta from "../components/ui/DetalleVenta";
 
@@ -929,8 +931,6 @@ export default function Ventas() {
   const [showModal, setShowModal] = useState(false);
   const [showFiltros, setShowFiltros] = useState(false);
   const [cajaAbierta, setCajaAbierta] = useState(false);
-  const [paginaActual, setPaginaActual] = useState(1);
-  const POR_PAGINA = 20;
   const [showTicket, setShowTicket] = useState(false);
   const [ventaImprimir, setVentaImprimir] = useState(null);
   const [ventaDetalle, setVentaDetalle] = useState(null);
@@ -973,7 +973,6 @@ export default function Ventas() {
   }, []);
 
   useEffect(() => {
-    setPaginaActual(1);
   }, [filtros]);
 
   const handleCancel = async () => {
@@ -1046,10 +1045,22 @@ export default function Ventas() {
     .filter((v) => v.estado === "completada")
     .reduce((acc, v) => acc + v.total, 0);
 
-  const ventasPaginadas = filtered.slice(
-    (paginaActual - 1) * POR_PAGINA,
-    paginaActual * POR_PAGINA,
-  );
+  const nombreCliente = (v) => {
+    const c = clientes.find((x) => x.id === v.cliente_id);
+    return c ? `${c.nombre} ${c.apellido || ""}`.trim() : "Consumidor final";
+  };
+
+  const tabla = useTabla(filtered, {
+    porPagina: 20,
+    ordenInicial: { campo: "fecha", dir: "desc" },
+    accessors: {
+      fecha: (v) => (v.fecha ? new Date(v.fecha).getTime() : null),
+      cliente: nombreCliente,
+      productos: (v) => v.items?.length || 0,
+      pago: (v) => v.metodo_pago,
+    },
+  });
+  const ventasPaginadas = tabla.filas;
 
   return (
     <div className="space-y-6">
@@ -1266,30 +1277,30 @@ export default function Ventas() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                  <ThOrdenable campo="numero_venta" tabla={tabla} align="center">
                     Número
-                  </th>
-                  <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                  </ThOrdenable>
+                  <ThOrdenable campo="fecha" tabla={tabla} align="center">
                     Fecha
-                  </th>
-                  <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                  </ThOrdenable>
+                  <ThOrdenable campo="cliente" tabla={tabla} align="center">
                     Cliente
-                  </th>
-                  <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                  </ThOrdenable>
+                  <ThOrdenable campo="sucursal" tabla={tabla} align="center">
                     Sucursal
-                  </th>
-                  <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                  </ThOrdenable>
+                  <ThOrdenable campo="productos" tabla={tabla} align="center">
                     Productos
-                  </th>
-                  <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                  </ThOrdenable>
+                  <ThOrdenable campo="pago" tabla={tabla} align="center">
                     Medio de pago
-                  </th>
-                  <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                  </ThOrdenable>
+                  <ThOrdenable campo="total" tabla={tabla} align="center">
                     Total
-                  </th>
-                  <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                  </ThOrdenable>
+                  <ThOrdenable campo="estado" tabla={tabla} align="center">
                     Estado
-                  </th>
+                  </ThOrdenable>
                   <th className="px-6 py-3"></th>
                 </tr>
               </thead>
@@ -1337,10 +1348,10 @@ export default function Ventas() {
           </div>
 
           <Paginacion
-            total={filtered.length}
-            porPagina={POR_PAGINA}
-            paginaActual={paginaActual}
-            onChange={setPaginaActual}
+            total={tabla.total}
+            porPagina={tabla.porPagina}
+            paginaActual={tabla.pagina}
+            onChange={tabla.setPagina}
           />
         </>
       )}

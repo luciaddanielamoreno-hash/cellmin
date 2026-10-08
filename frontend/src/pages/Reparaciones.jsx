@@ -32,6 +32,8 @@ import OrdenReparacion from "../components/ui/OrdenReparacion";
 import DetalleReparacion from "../components/ui/DetalleReparacion";
 import MenuAcciones from "../components/ui/MenuAcciones";
 import Paginacion from "../components/ui/Paginacion";
+import ThOrdenable from "../components/ui/ThOrdenable";
+import { useTabla } from "../hooks/useTabla";
 
 function NuevoClienteModal({ onClose, onSave }) {
   const [form, setForm] = useState({
@@ -1797,6 +1799,25 @@ export default function Reparaciones() {
     return true;
   });
 
+  const nombreCliente = (r) => {
+    const c = clientes.find((x) => x.id === r.cliente_id);
+    return c ? `${c.nombre} ${c.apellido || ""}`.trim() : "";
+  };
+  const ordenEstados = Object.keys(ESTADOS_REP);
+
+  const tabla = useTabla(filtered, {
+    porPagina: 20,
+    ordenInicial: { campo: "orden", dir: "desc" },
+    accessors: {
+      orden: (r) => r.numero_orden,
+      cliente: nombreCliente,
+      equipo: (r) => `${r.equipo?.marca || ""} ${r.equipo?.modelo || ""}`.trim(),
+      estado: (r) => ordenEstados.indexOf(r.estado),
+      reparaciones: (r) => r.precio_total || 0,
+      saldo: (r) => r.saldo_pendiente || 0,
+    },
+  });
+
   const limpiarFiltros = () =>
     setFiltros({ busqueda: "", estado: "", cliente_id: "" });
   const filtrosActivos = Object.values(filtros).some((v) => v !== "");
@@ -1955,31 +1976,31 @@ export default function Reparaciones() {
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                      <ThOrdenable campo="orden" tabla={tabla}>
                         Orden
-                      </th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                      </ThOrdenable>
+                      <ThOrdenable campo="cliente" tabla={tabla}>
                         Cliente
-                      </th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                      </ThOrdenable>
+                      <ThOrdenable campo="equipo" tabla={tabla}>
                         Equipo
-                      </th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                      </ThOrdenable>
+                      <ThOrdenable campo="estado" tabla={tabla}>
                         Estado
-                      </th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                      </ThOrdenable>
+                      <ThOrdenable campo="reparaciones" tabla={tabla}>
                         Reparaciones
-                      </th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                      </ThOrdenable>
+                      <ThOrdenable campo="saldo" tabla={tabla}>
                         Saldo
-                      </th>
+                      </ThOrdenable>
                       <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                         Acciones
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {filtered.map((r) => (
+                    {tabla.filas.map((r) => (
                       <FilaReparacion
                         key={r.id}
                         reparacion={r}
@@ -2001,7 +2022,7 @@ export default function Reparaciones() {
 
               {/* Mobile */}
               <div className="md:hidden space-y-3">
-                {filtered.map((r) => (
+                {tabla.filas.map((r) => (
                   <CardReparacionMobile
                     key={r.id}
                     reparacion={r}
@@ -2018,6 +2039,13 @@ export default function Reparaciones() {
                   />
                 ))}
               </div>
+
+              <Paginacion
+                total={tabla.total}
+                porPagina={tabla.porPagina}
+                paginaActual={tabla.pagina}
+                onChange={tabla.setPagina}
+              />
             </>
           )}
 

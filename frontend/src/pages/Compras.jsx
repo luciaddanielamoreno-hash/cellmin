@@ -477,9 +477,34 @@ function NuevaCompraModal({ onClose, onSave }) {
   );
 }
 
-function FilaCompra({ compra, proveedores }) {
+function ModalConfirmar({ mensaje, onConfirmar, onCancelar }) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-6 space-y-4">
+        <p className="text-gray-800 font-medium text-center">{mensaje}</p>
+        <div className="flex gap-3">
+          <button
+            onClick={onCancelar}
+            className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-xl text-sm hover:bg-gray-50 transition"
+          >
+            Volver
+          </button>
+          <button
+            onClick={onConfirmar}
+            className="flex-1 py-2 bg-red-600 text-white rounded-xl text-sm hover:bg-red-700 transition"
+          >
+            Confirmar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FilaCompra({ compra, proveedores, onCancel }) {
   const [expandido, setExpandido] = useState(false);
   const proveedor = proveedores.find((p) => p.id === compra.proveedor_id);
+  const cancelada = compra.estado === "cancelada";
 
   return (
     <>
@@ -496,25 +521,51 @@ function FilaCompra({ compra, proveedores }) {
           {proveedor?.nombre || "-"}
         </td>
         <td className="px-6 py-4 text-sm text-gray-600">
-          {compra.items?.length || 0} productos
+          {compra.items?.length || 0}
         </td>
-        <td className="px-6 py-4 text-sm font-semibold text-gray-800">
+        <td
+          className={`px-6 py-4 text-sm font-semibold ${cancelada ? "text-gray-400 line-through" : "text-gray-800"}`}
+        >
           {formatCurrency(compra.total)}
         </td>
         <td className="px-6 py-4 text-sm text-gray-500">
           {compra.fecha ? formatDateTime(compra.fecha) : "-"}
         </td>
         <td className="px-6 py-4">
-          {expandido ? (
-            <ChevronUp size={16} className="text-gray-400" />
-          ) : (
-            <ChevronDown size={16} className="text-gray-400" />
-          )}
+          <span
+            className={`px-2 py-1 rounded-lg text-xs font-medium ${
+              cancelada
+                ? "bg-red-100 text-red-700"
+                : "bg-green-100 text-green-700"
+            }`}
+          >
+            {cancelada ? "Cancelada" : "Completada"}
+          </span>
+        </td>
+        <td className="px-6 py-4">
+          <div className="flex items-center gap-2">
+            {!cancelada && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCancel(compra._id, compra.numero_compra);
+                }}
+                className="px-3 py-1 text-xs text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition"
+              >
+                Cancelar
+              </button>
+            )}
+            {expandido ? (
+              <ChevronUp size={16} className="text-gray-400" />
+            ) : (
+              <ChevronDown size={16} className="text-gray-400" />
+            )}
+          </div>
         </td>
       </tr>
       {expandido && (
         <tr>
-          <td colSpan={6} className="px-6 pb-4 bg-gray-50">
+          <td colSpan={7} className="px-6 pb-4 bg-gray-50">
             <div className="rounded-xl border border-gray-200 overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-gray-100">
@@ -571,8 +622,9 @@ function FilaCompra({ compra, proveedores }) {
   );
 }
 
-function CardCompraMobile({ compra, proveedor }) {
+function CardCompraMobile({ compra, proveedor, onCancel }) {
   const [expandido, setExpandido] = useState(false);
+  const cancelada = compra.estado === "cancelada";
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -581,10 +633,17 @@ function CardCompraMobile({ compra, proveedor }) {
           <span className="font-medium text-blue-600">
             {compra.numero_compra}
           </span>
-          <span className="text-sm font-bold text-gray-800">
+          <span
+            className={`text-sm font-bold ${cancelada ? "text-gray-400 line-through" : "text-gray-800"}`}
+          >
             {formatCurrency(compra.total)}
           </span>
         </div>
+        {cancelada && (
+          <span className="inline-block mb-2 px-2 py-1 rounded-lg text-xs font-medium bg-red-100 text-red-700">
+            Cancelada
+          </span>
+        )}
         <div className="space-y-1 text-sm text-gray-600">
           <p className="font-medium text-gray-700">
             {proveedor?.nombre || "-"}
@@ -601,13 +660,23 @@ function CardCompraMobile({ compra, proveedor }) {
             </p>
           )}
         </div>
-        <button
-          onClick={() => setExpandido(!expandido)}
-          className="mt-3 flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
-        >
-          {expandido ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          {expandido ? "Ocultar detalle" : "Ver detalle"}
-        </button>
+        <div className="mt-3 flex items-center justify-between">
+          <button
+            onClick={() => setExpandido(!expandido)}
+            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+          >
+            {expandido ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            {expandido ? "Ocultar detalle" : "Ver detalle"}
+          </button>
+          {!cancelada && (
+            <button
+              onClick={() => onCancel(compra._id, compra.numero_compra)}
+              className="px-3 py-1 text-xs text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition"
+            >
+              Cancelar
+            </button>
+          )}
+        </div>
       </div>
 
       {expandido && (
@@ -937,6 +1006,7 @@ export default function Compras() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [compraCancelar, setCompraCancelar] = useState(null);
 
   const fetchData = async () => {
     try {
@@ -965,6 +1035,20 @@ export default function Compras() {
         ?.nombre?.toLowerCase()
         .includes(search.toLowerCase()),
   );
+
+  const handleCancelar = async () => {
+    try {
+      await comprasService.cancelar(compraCancelar.id);
+      toast.success("Compra cancelada y stock revertido");
+      setCompraCancelar(null);
+      fetchData();
+    } catch (error) {
+      toast.error(
+        error.response?.data?.detail || "Error al cancelar la compra",
+      );
+      setCompraCancelar(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -1048,13 +1132,16 @@ export default function Compras() {
                         Proveedor
                       </th>
                       <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                        Productos
+                        Cant.
                       </th>
                       <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                         Total
                       </th>
                       <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                         Fecha
+                      </th>
+                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                        Estado
                       </th>
                       <th className="px-6 py-3"></th>
                     </tr>
@@ -1065,6 +1152,9 @@ export default function Compras() {
                         key={compra._id}
                         compra={compra}
                         proveedores={proveedores}
+                        onCancel={(id, numero) =>
+                          setCompraCancelar({ id, numero })
+                        }
                       />
                     ))}
                   </tbody>
@@ -1082,6 +1172,9 @@ export default function Compras() {
                       key={compra._id}
                       compra={compra}
                       proveedor={proveedor}
+                      onCancel={(id, numero) =>
+                        setCompraCancelar({ id, numero })
+                      }
                     />
                   );
                 })}
@@ -1098,6 +1191,14 @@ export default function Compras() {
             />
           )}
         </div>
+      )}
+
+      {compraCancelar && (
+        <ModalConfirmar
+          mensaje={`¿Cancelar la compra ${compraCancelar.numero}? Se va a restar el stock que había sumado.`}
+          onConfirmar={handleCancelar}
+          onCancelar={() => setCompraCancelar(null)}
+        />
       )}
     </div>
   );

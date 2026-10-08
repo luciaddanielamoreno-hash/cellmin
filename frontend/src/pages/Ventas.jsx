@@ -34,6 +34,7 @@ function NuevaVentaModal({ onClose, onSave }) {
   const [pagoMixto, setPagoMixto] = useState(false);
   const [pagos, setPagos] = useState([{ metodo: "efectivo", monto: 0 }]);
   const [loading, setLoading] = useState(false);
+  const [montoEditado, setMontoEditado] = useState(false);
 
   useEffect(() => {
     Promise.all([productosService.getAll(), clientesService.getAll()]).then(
@@ -52,8 +53,21 @@ function NuevaVentaModal({ onClose, onSave }) {
 
   const agregarAlCarrito = (producto, variante = null) => {
     const key = variante ? `${producto.id}-${variante.nombre}` : producto.id;
+    const stockDisponible = variante
+      ? (variante.stock_actual ?? 0)
+      : (producto.stock_actual ?? 0);
     const existente = carrito.find((item) => item.key === key);
+
+    if (stockDisponible <= 0) {
+      toast.error("Sin stock disponible");
+      return;
+    }
+
     if (existente) {
+      if (existente.cantidad + 1 > stockDisponible) {
+        toast.error(`Solo hay ${stockDisponible} unidades disponibles`);
+        return;
+      }
       setCarrito(
         carrito.map((item) =>
           item.key === key
@@ -79,6 +93,7 @@ function NuevaVentaModal({ onClose, onSave }) {
           cantidad: 1,
           precio_unitario: precio,
           subtotal: precio,
+          stock_disponible: stockDisponible,
         },
       ]);
     }
@@ -89,11 +104,16 @@ function NuevaVentaModal({ onClose, onSave }) {
       setCarrito(carrito.filter((item) => item.key !== key));
       return;
     }
+    const item = carrito.find((i) => i.key === key);
+    if (item && cantidad > item.stock_disponible) {
+      toast.error(`Solo hay ${item.stock_disponible} unidades disponibles`);
+      return;
+    }
     setCarrito(
-      carrito.map((item) =>
-        item.key === key
-          ? { ...item, cantidad, subtotal: cantidad * item.precio_unitario }
-          : item,
+      carrito.map((i) =>
+        i.key === key
+          ? { ...i, cantidad, subtotal: cantidad * i.precio_unitario }
+          : i,
       ),
     );
   };
@@ -116,13 +136,24 @@ function NuevaVentaModal({ onClose, onSave }) {
       ? (parseFloat(pagos[0]?.monto) || 0) - total
       : null;
 
+  useEffect(() => {
+    if (!pagoMixto && pagos[0]?.metodo === "efectivo" && !montoEditado) {
+      setPagos([{ ...pagos[0], monto: Math.round(total * 100) / 100 }]);
+    }
+  }, [total, pagoMixto, pagos[0]?.metodo, montoEditado]);
+
   const handlePagoChange = (index, field, value) => {
+    if (!pagoMixto) {
+      if (field === "monto") setMontoEditado(true);
+      if (field === "metodo") setMontoEditado(false);
+    }
     const newPagos = [...pagos];
     newPagos[index] = { ...newPagos[index], [field]: value };
     setPagos(newPagos);
   };
 
   const togglePagoMixto = (value) => {
+    setMontoEditado(false);
     setPagoMixto(value);
     setPagos(
       value
@@ -172,7 +203,9 @@ function NuevaVentaModal({ onClose, onSave }) {
       toast.success(`Venta ${result.numero_venta} registrada`);
       onSave();
     } catch (error) {
-      toast.error("Error al registrar la venta");
+      toast.error(
+        error.response?.data?.detail || "Error al registrar la venta",
+      );
     } finally {
       setLoading(false);
     }
@@ -219,14 +252,16 @@ function NuevaVentaModal({ onClose, onSave }) {
                           onClick={() => agregarAlCarrito(producto, v)}
                           className="px-3 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs hover:bg-blue-100 transition"
                         >
-                          {v.nombre} — {formatCurrency(v.precio_venta)}
+                          {v.nombre} — {formatCurrency(v.precio_venta)} (stock:{" "}
+                          {v.stock_actual ?? 0})
                         </button>
                       ))}
                     </div>
                   ) : (
                     <div className="flex items-center justify-between mt-1">
                       <span className="text-sm text-gray-500">
-                        {formatCurrency(producto.precio_venta)}
+                        {formatCurrency(producto.precio_venta)} · stock:{" "}
+                        {producto.stock_actual ?? 0}
                       </span>
                       <button
                         type="button"

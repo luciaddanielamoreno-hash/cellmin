@@ -670,6 +670,7 @@ export default function Stock() {
                       inventario: "Inventario",
                       compra: "Compra",
                       venta: "Venta",
+                      cancelacion_compra: "Cancelación de compra",
                     }[m.motivo] || m.motivo;
                   return (
                     <tr key={i} className="hover:bg-gray-50 transition">
@@ -751,6 +752,7 @@ export default function Stock() {
                     inventario: "Inventario",
                     compra: "Compra",
                     venta: "Venta",
+                    cancelacion_compra: "Cancelación de compra",
                   }[m.motivo] || m.motivo;
                 return (
                   <div

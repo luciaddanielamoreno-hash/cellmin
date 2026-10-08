@@ -25,6 +25,17 @@ async def get_sales(current_user: dict = Depends(get_current_user)):
     sales = await db.ventas.find().sort("fecha", -1).to_list(500)
     return [{**s, "_id": str(s["_id"])} for s in sales]
 
+@router.get("/{sale_id}")
+async def get_sale(sale_id: str, current_user: dict = Depends(get_current_user)):
+    check_permission(current_user["role"], "ventas:read")
+    db = get_db()
+    if not ObjectId.is_valid(sale_id):
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
+    sale = await db.ventas.find_one({"_id": ObjectId(sale_id)})
+    if not sale:
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
+    return {**sale, "_id": str(sale["_id"])}
+
 @router.post("/")
 async def create_sale(sale: SaleCreate, current_user: dict = Depends(get_current_user)):
     check_permission(current_user["role"], "ventas:create")

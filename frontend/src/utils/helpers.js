@@ -75,3 +75,20 @@ export const parsearMoneda = (valor) => {
   const limpio = valor.replace(/\./g, "").replace(",", ".");
   return parseFloat(limpio) || 0;
 };
+
+// Interpreta el texto guardado en venta.metodo_pago.
+// Pago simple: "efectivo"
+// Pago mixto:  "efectivo: $ 10.000,00 + transferencia: $ 10.000,00"
+export const parsearMetodoPago = (texto) => {
+  if (!texto) return { esMixto: false, partes: [] };
+  const partes = texto.split(" + ").map((parte) => {
+    const [metodo, ...resto] = parte.split(": ");
+    const clave = metodo.trim();
+    const info = METODOS_PAGO.find((m) => m.value === clave);
+    return {
+      metodo: info ? info.label : clave,
+      monto: resto.length ? resto.join(": ") : null,
+    };
+  });
+  return { esMixto: partes.length > 1, partes };
+};

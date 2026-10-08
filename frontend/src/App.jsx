@@ -11,6 +11,7 @@ import Proveedores from "./pages/Proveedores";
 import Stock from "./pages/Stock";
 import Compras from "./pages/Compras";
 import Ventas from "./pages/Ventas";
+import VentaDetalle from "./pages/VentaDetalle";
 import Caja from "./pages/Caja";
 import Reparaciones from "./pages/Reparaciones";
 import TiposReparacion from "./pages/TiposReparacion";
@@ -103,6 +104,14 @@ export default function App() {
         element={
           <PrivateLayout>
             <Ventas />
+          </PrivateLayout>
+        }
+      />
+      <Route
+        path="/ventas/:id"
+        element={
+          <PrivateLayout>
+            <VentaDetalle />
           </PrivateLayout>
         }
       />

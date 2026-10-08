@@ -8,15 +8,23 @@ import {
   ChevronUp,
   X,
   Filter,
+  ExternalLink,
+  Printer,
 } from "lucide-react";
 import { ventasService } from "../services/ventas.service";
 import { productosService } from "../services/productos.service";
 import { clientesService } from "../services/clientes.service";
 import toast from "react-hot-toast";
-import { formatCurrency, formatDateTime, METODOS_PAGO } from "../utils/helpers";
+import {
+  formatCurrency,
+  formatDateTime,
+  METODOS_PAGO,
+  parsearMetodoPago,
+} from "../utils/helpers";
 import { useAuth } from "../context/AuthContext";
 import Paginacion from "../components/ui/Paginacion";
 import TicketVenta from "../components/ui/TicketVenta";
+import DetalleVenta from "../components/ui/DetalleVenta";
 
 function NuevaVentaModal({ onClose, onSave }) {
   const { user } = useAuth();
@@ -149,6 +157,15 @@ function NuevaVentaModal({ onClose, onSave }) {
     }
     const newPagos = [...pagos];
     newPagos[index] = { ...newPagos[index], [field]: value };
+    // Pago mixto con 2 medios: el otro se autocompleta con lo que falta
+    if (pagoMixto && field === "monto" && newPagos.length === 2) {
+      const otro = index === 0 ? 1 : 0;
+      const resto = Math.max(0, total - (parseFloat(value) || 0));
+      newPagos[otro] = {
+        ...newPagos[otro],
+        monto: Math.round(resto * 100) / 100,
+      };
+    }
     setPagos(newPagos);
   };
 
@@ -529,42 +546,63 @@ function NuevaVentaModal({ onClose, onSave }) {
   );
 }
 
-function FilaVenta({ venta, clientes, onCancel, onImprimir }) {
+function BadgePago({ metodoPago }) {
+  const { esMixto, partes } = parsearMetodoPago(metodoPago);
+  if (esMixto) {
+    return (
+      <span
+        title={partes.map((p) => `${p.metodo}: ${p.monto}`).join(" + ")}
+        className="px-2 py-1 bg-purple-50 text-purple-700 rounded-lg text-xs font-medium cursor-help"
+      >
+        Mixto
+      </span>
+    );
+  }
+  return (
+    <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium">
+      {partes[0]?.metodo || "-"}
+    </span>
+  );
+}
+
+function FilaVenta({ venta, clientes, onCancel, onImprimir, onVerDetalle }) {
   const [expandido, setExpandido] = useState(false);
   const cliente = clientes.find((c) => c.id === venta.cliente_id);
+  const pago = parsearMetodoPago(venta.metodo_pago);
 
   return (
     <>
       {/* Desktop */}
       <tr className="hidden md:table-row hover:bg-gray-50 transition">
-        <td className="px-6 py-4">
-          <span className="font-medium text-blue-600">
+        <td className="px-6 py-4 text-center">
+          <button
+            onClick={() => onVerDetalle(venta)}
+            className="font-medium text-blue-600 hover:text-blue-800 hover:underline whitespace-nowrap"
+          >
             {venta.numero_venta}
-          </span>
+          </button>
         </td>
-        <td className="px-6 py-4 text-sm text-gray-700">
+        <td className="px-6 py-4 text-sm text-center text-gray-700">
           {venta.fecha ? formatDateTime(venta.fecha) : "-"}
         </td>
-        <td className="px-6 py-4 text-sm text-gray-600">
+        <td className="px-6 py-4 text-sm text-center text-gray-600">
           {cliente
             ? `${cliente.nombre} ${cliente.apellido || ""}`
             : "Consumidor final"}
         </td>
-        <td className="px-6 py-4 text-sm text-gray-600">
+        <td className="px-6 py-4 text-sm text-center text-gray-600">
           {venta.sucursal === "sucursal_1" ? "Sucursal 1" : "Sucursal 2"}
         </td>
-        <td className="px-6 py-4 text-sm text-gray-600">
-          {venta.items?.length || 0} productos
+        <td className="px-6 py-4 text-sm text-center text-gray-600">
+          {venta.items?.length || 0}
         </td>
-        <td className="px-6 py-4">
-          <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium">
-            {venta.metodo_pago}
-          </span>
+        <td className="px-6 py-4 text-center">
+          <BadgePago metodoPago={venta.metodo_pago} />
         </td>
-        <td className="px-6 py-4 text-sm font-semibold text-gray-800">
+        <td className="px-6 py-4 text-sm text-center font-semibold text-gray-800">
           {formatCurrency(venta.total)}
         </td>
-        <td className="px-6 py-4">
+        <td className="px-6 py-4 text-center">
           <span
             className={`px-2 py-1 rounded-lg text-xs font-medium ${
               venta.estado === "completada"
@@ -575,8 +613,8 @@ function FilaVenta({ venta, clientes, onCancel, onImprimir }) {
             {venta.estado === "completada" ? "Completada" : "Cancelada"}
           </span>
         </td>
-        <td className="px-6 py-4">
-          <div className="flex items-center gap-2">
+        <td className="px-6 py-4 text-center">
+          <div className="flex items-center justify-center gap-2">
             {venta.estado === "completada" && (
               <button
                 onClick={() => onCancel(venta._id, venta.numero_venta)}
@@ -585,6 +623,15 @@ function FilaVenta({ venta, clientes, onCancel, onImprimir }) {
                 Cancelar
               </button>
             )}
+            <a
+              href={`/ventas/${venta._id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Ver detalle en pestaña nueva"
+              className="p-1 text-gray-400 hover:text-blue-600"
+            >
+              <ExternalLink size={16} />
+            </a>
             <button
               onClick={() => setExpandido(!expandido)}
               className="p-1 text-gray-400 hover:text-gray-600"
@@ -603,16 +650,16 @@ function FilaVenta({ venta, clientes, onCancel, onImprimir }) {
               <table className="w-full text-sm">
                 <thead className="bg-gray-100">
                   <tr>
-                    <th className="text-left px-4 py-2 text-xs font-medium text-gray-500">
+                    <th className="text-center px-4 py-2 text-xs font-medium text-gray-500">
                       Producto
                     </th>
-                    <th className="text-left px-4 py-2 text-xs font-medium text-gray-500">
+                    <th className="text-center px-4 py-2 text-xs font-medium text-gray-500">
                       Cantidad
                     </th>
-                    <th className="text-left px-4 py-2 text-xs font-medium text-gray-500">
+                    <th className="text-center px-4 py-2 text-xs font-medium text-gray-500">
                       Precio unit.
                     </th>
-                    <th className="text-left px-4 py-2 text-xs font-medium text-gray-500">
+                    <th className="text-center px-4 py-2 text-xs font-medium text-gray-500">
                       Subtotal
                     </th>
                   </tr>
@@ -620,27 +667,31 @@ function FilaVenta({ venta, clientes, onCancel, onImprimir }) {
                 <tbody className="divide-y divide-gray-100">
                   {venta.items?.map((item, i) => (
                     <tr key={i} className="bg-white">
-                      <td className="px-4 py-2 font-medium text-gray-700">
+                      <td className="px-4 py-2 text-center font-medium text-gray-700">
                         {item.nombre_producto}
                       </td>
-                      <td className="px-4 py-2 text-gray-600">
+                      <td className="px-4 py-2 text-center text-gray-600">
                         {item.cantidad}
                       </td>
-                      <td className="px-4 py-2 text-gray-600">
+                      <td className="px-4 py-2 text-center text-gray-600">
                         {formatCurrency(item.precio_unitario)}
                       </td>
-                      <td className="px-4 py-2 font-medium text-gray-700">
+                      <td className="px-4 py-2 text-center font-medium text-gray-700">
                         {formatCurrency(item.subtotal)}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <div className="px-4 py-2 bg-gray-50 flex justify-between text-sm">
+              <div className="px-4 py-2 bg-gray-50 flex flex-wrap justify-between gap-2 text-sm">
                 <span className="text-gray-500">
-                  Método:{" "}
+                  Pago:{" "}
                   <span className="font-medium text-gray-700">
-                    {venta.metodo_pago}
+                    {pago.esMixto
+                      ? `Mixto (${pago.partes
+                          .map((p) => `${p.metodo} ${p.monto}`)
+                          .join(" + ")})`
+                      : pago.partes[0]?.metodo || "-"}
                   </span>
                 </span>
                 {venta.descuento > 0 && (
@@ -658,7 +709,8 @@ function FilaVenta({ venta, clientes, onCancel, onImprimir }) {
                 onClick={() => onImprimir(venta)}
                 className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 text-white rounded-lg text-xs hover:bg-gray-800 transition"
               >
-                🖨️ Imprimir ticket
+                <Printer size={14} />
+                Imprimir ticket
               </button>
             </div>
           </td>
@@ -669,17 +721,27 @@ function FilaVenta({ venta, clientes, onCancel, onImprimir }) {
 }
 
 // Card mobile separada
-function CardVentaMobile({ venta, clientes, onCancel, onImprimir }) {
+function CardVentaMobile({
+  venta,
+  clientes,
+  onCancel,
+  onImprimir,
+  onVerDetalle,
+}) {
   const [expandido, setExpandido] = useState(false);
   const cliente = clientes.find((c) => c.id === venta.cliente_id);
+  const pago = parsearMetodoPago(venta.metodo_pago);
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       <div className="p-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="font-medium text-blue-600">
+          <button
+            onClick={() => onVerDetalle(venta)}
+            className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+          >
             {venta.numero_venta}
-          </span>
+          </button>
           <span
             className={`px-2 py-1 rounded-lg text-xs font-medium ${
               venta.estado === "completada"
@@ -698,9 +760,7 @@ function CardVentaMobile({ venta, clientes, onCancel, onImprimir }) {
           </p>
           <p>{venta.fecha ? formatDateTime(venta.fecha) : "-"}</p>
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-lg text-xs">
-              {venta.metodo_pago}
-            </span>
+            <BadgePago metodoPago={venta.metodo_pago} />
             <span className="text-xs text-gray-400">
               {venta.sucursal === "sucursal_1" ? "Sucursal 1" : "Sucursal 2"}
             </span>
@@ -719,6 +779,15 @@ function CardVentaMobile({ venta, clientes, onCancel, onImprimir }) {
                 Cancelar
               </button>
             )}
+            <a
+              href={`/ventas/${venta._id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Ver detalle en pestaña nueva"
+              className="p-1 text-gray-400 hover:text-blue-600"
+            >
+              <ExternalLink size={16} />
+            </a>
             <button
               onClick={() => setExpandido(!expandido)}
               className="p-1 text-gray-400 hover:text-gray-600"
@@ -747,6 +816,19 @@ function CardVentaMobile({ venta, clientes, onCancel, onImprimir }) {
               <span>- {formatCurrency(venta.descuento)}</span>
             </div>
           )}
+          {pago.esMixto && (
+            <div className="border-t border-gray-200 pt-1 space-y-0.5">
+              {pago.partes.map((p, i) => (
+                <div
+                  key={i}
+                  className="flex justify-between text-xs text-gray-600"
+                >
+                  <span>{p.metodo}</span>
+                  <span className="font-medium">{p.monto}</span>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex justify-between text-sm font-bold text-gray-800 border-t border-gray-200 pt-1">
             <span>Total</span>
             <span>{formatCurrency(venta.total)}</span>
@@ -756,11 +838,61 @@ function CardVentaMobile({ venta, clientes, onCancel, onImprimir }) {
               onClick={() => onImprimir(venta)}
               className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 text-white rounded-lg text-xs hover:bg-gray-800 transition"
             >
-              🖨️ Imprimir ticket
+              <Printer size={14} />
+              Imprimir ticket
             </button>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ModalDetalleVenta({ venta, cliente, onClose, onImprimir }) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-3xl shadow-xl max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b border-gray-100 sticky top-0 bg-white flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-800">
+            Venta {venta.numero_venta}
+          </h2>
+          <div className="flex items-center gap-2">
+            <a
+              href={`/ventas/${venta._id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 px-3 py-1.5 text-xs text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+            >
+              <ExternalLink size={14} />
+              Pestaña nueva
+            </a>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition"
+            >
+              <X size={20} className="text-gray-500" />
+            </button>
+          </div>
+        </div>
+        <div className="p-6">
+          <DetalleVenta venta={venta} cliente={cliente} />
+        </div>
+        <div className="p-6 border-t border-gray-100 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-xl text-sm hover:bg-gray-50 transition"
+          >
+            Cerrar
+          </button>
+          <button
+            onClick={() => onImprimir(venta)}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-800 text-white rounded-xl text-sm hover:bg-gray-900 transition"
+          >
+            <Printer size={16} />
+            Imprimir ticket
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -801,6 +933,7 @@ export default function Ventas() {
   const POR_PAGINA = 20;
   const [showTicket, setShowTicket] = useState(false);
   const [ventaImprimir, setVentaImprimir] = useState(null);
+  const [ventaDetalle, setVentaDetalle] = useState(null);
   const [showConfirmar, setShowConfirmar] = useState(false);
   const [ventaCancelarId, setVentaCancelarId] = useState(null);
   const [ventaCancelarNumero, setVentaCancelarNumero] = useState(null);
@@ -1133,28 +1266,28 @@ export default function Ventas() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                  <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Número
                   </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                  <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Fecha
                   </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                  <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Cliente
                   </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                  <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Sucursal
                   </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                  <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Productos
                   </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                  <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Medio de pago
                   </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                  <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Total
                   </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                  <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Estado
                   </th>
                   <th className="px-6 py-3"></th>
@@ -1166,6 +1299,7 @@ export default function Ventas() {
                     key={venta._id}
                     venta={venta}
                     clientes={clientes}
+                    onVerDetalle={setVentaDetalle}
                     onCancel={(id, numero) => {
                       setVentaCancelarId(id);
                       setVentaCancelarNumero(numero);
@@ -1188,6 +1322,7 @@ export default function Ventas() {
                 key={venta._id}
                 venta={venta}
                 clientes={clientes}
+                onVerDetalle={setVentaDetalle}
                 onCancel={(id, numero) => {
                   setVentaCancelarId(id);
                   setVentaCancelarNumero(numero);
@@ -1216,6 +1351,18 @@ export default function Ventas() {
           onSave={() => {
             setShowModal(false);
             fetchData();
+          }}
+        />
+      )}
+
+      {ventaDetalle && (
+        <ModalDetalleVenta
+          venta={ventaDetalle}
+          cliente={clientes.find((c) => c.id === ventaDetalle.cliente_id)}
+          onClose={() => setVentaDetalle(null)}
+          onImprimir={(v) => {
+            setVentaImprimir(v);
+            setShowTicket(true);
           }}
         />
       )}

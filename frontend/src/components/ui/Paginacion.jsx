@@ -3,6 +3,7 @@ export default function Paginacion({
   porPagina,
   paginaActual,
   onChange,
+  compacto = false,
 }) {
   const totalPaginas = Math.ceil(total / porPagina);
   if (totalPaginas <= 1) return null;
@@ -31,7 +32,11 @@ export default function Paginacion({
   );
 
   return (
-    <div className="flex items-center justify-between px-2 py-3">
+    <div
+      className={`flex items-center px-2 py-3 ${
+        compacto ? "flex-col gap-2" : "justify-between"
+      }`}
+    >
       <p className="text-sm text-gray-500">
         Mostrando {Math.min((paginaActual - 1) * porPagina + 1, total)} —{" "}
         {Math.min(paginaActual * porPagina, total)} de {total}

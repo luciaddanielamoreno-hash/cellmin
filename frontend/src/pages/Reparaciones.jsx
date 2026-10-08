@@ -31,6 +31,7 @@ import { useAuth } from "../context/AuthContext";
 import OrdenReparacion from "../components/ui/OrdenReparacion";
 import DetalleReparacion from "../components/ui/DetalleReparacion";
 import MenuAcciones from "../components/ui/MenuAcciones";
+import Paginacion from "../components/ui/Paginacion";
 
 function NuevoClienteModal({ onClose, onSave }) {
   const [form, setForm] = useState({
@@ -157,9 +158,17 @@ function NuevoClienteModal({ onClose, onSave }) {
 
 function SelectorTipos({ tiposDisponibles, tiposSeleccionados, onToggle }) {
   const [busqueda, setBusqueda] = useState("");
+  const [pagina, setPagina] = useState(1);
+  const POR_PAGINA = 6;
 
   const tiposFiltrados = tiposDisponibles.filter((t) =>
-    t.nombre.toLowerCase().includes(busqueda.toLowerCase()),
+    `${t.nombre} ${t.descripcion || ""}`
+      .toLowerCase()
+      .includes(busqueda.toLowerCase()),
+  );
+  const tiposPagina = tiposFiltrados.slice(
+    (pagina - 1) * POR_PAGINA,
+    pagina * POR_PAGINA,
   );
 
   const precioTotal = tiposSeleccionados.reduce((acc, t) => acc + t.precio, 0);
@@ -175,17 +184,20 @@ function SelectorTipos({ tiposDisponibles, tiposSeleccionados, onToggle }) {
           type="text"
           placeholder="Buscar tipo de reparación..."
           value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
+          onChange={(e) => {
+            setBusqueda(e.target.value);
+            setPagina(1);
+          }}
           className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
-      <div className="max-h-48 overflow-y-auto space-y-1">
+      <div className="space-y-1">
         {tiposFiltrados.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-4">
             No se encontraron tipos
           </p>
         ) : (
-          tiposFiltrados.map((tipo) => {
+          tiposPagina.map((tipo) => {
             const seleccionado = tiposSeleccionados.find(
               (t) => t.tipo_id === tipo.id,
             );
@@ -233,6 +245,13 @@ function SelectorTipos({ tiposDisponibles, tiposSeleccionados, onToggle }) {
           })
         )}
       </div>
+      <Paginacion
+        total={tiposFiltrados.length}
+        porPagina={POR_PAGINA}
+        paginaActual={pagina}
+        onChange={setPagina}
+        compacto
+      />
       {tiposSeleccionados.length > 0 && (
         <div className="bg-blue-50 rounded-xl p-3">
           <div className="space-y-1 mb-2">
@@ -609,52 +628,11 @@ function EditarTiposModal({ reparacion, tiposDisponibles, onClose, onSave }) {
           </h2>
         </div>
         <div className="p-6 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {tiposDisponibles.map((tipo) => {
-              const seleccionado = tiposSeleccionados.find(
-                (t) => t.tipo_id === tipo.id,
-              );
-              return (
-                <button
-                  key={tipo.id}
-                  type="button"
-                  onClick={() => toggleTipo(tipo)}
-                  className={`flex items-center justify-between p-3 rounded-xl border-2 transition text-left ${
-                    seleccionado
-                      ? "border-blue-500 bg-blue-50"
-                      : "border-gray-200 hover:border-gray-300"
-                  }`}
-                >
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">
-                      {tipo.nombre}
-                    </p>
-                    {tipo.descripcion && (
-                      <p className="text-xs text-gray-500">
-                        {tipo.descripcion}
-                      </p>
-                    )}
-                  </div>
-                  <span
-                    className={`text-sm font-bold ml-2 ${seleccionado ? "text-blue-600" : "text-gray-600"}`}
-                  >
-                    {formatCurrency(tipo.precio)}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {tiposSeleccionados.length > 0 && (
-            <div className="bg-blue-50 rounded-xl p-3 flex justify-between">
-              <span className="text-sm text-blue-700">
-                {tiposSeleccionados.length} reparación(es)
-              </span>
-              <span className="font-bold text-blue-700">
-                {formatCurrency(precioTotal)}
-              </span>
-            </div>
-          )}
+          <SelectorTipos
+            tiposDisponibles={tiposDisponibles}
+            tiposSeleccionados={tiposSeleccionados}
+            onToggle={toggleTipo}
+          />
 
           <div className="flex gap-3">
             <button

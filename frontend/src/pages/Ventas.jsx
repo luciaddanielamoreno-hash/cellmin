@@ -208,6 +208,12 @@ function NuevaVentaModal({ onClose, onSave }) {
         cliente_id: form.cliente_id || null,
         descuento: tipoAjuste === "descuento" ? montoAjuste : 0,
         total,
+        tipo_ajuste: tipoAjuste,
+        porcentaje_ajuste: porcentaje,
+        pagos: pagos.map((p) => ({
+          metodo: p.metodo,
+          monto: parseFloat(p.monto) || 0,
+        })),
         metodo_pago,
         items: carrito.map((item) => ({
           producto_id: item.producto_id,

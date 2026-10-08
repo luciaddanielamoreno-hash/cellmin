@@ -11,29 +11,26 @@ import {
   Edit,
   Trash2,
   ToggleLeft,
+  ExternalLink,
+  Printer,
+  PenLine,
+  ArrowRight,
+  Ban,
 } from "lucide-react";
 import { reparacionesService } from "../services/reparaciones.service";
 import { clientesService } from "../services/clientes.service";
 import toast from "react-hot-toast";
-import { formatCurrency, formatDateTime, METODOS_PAGO } from "../utils/helpers";
+import {
+  formatCurrency,
+  formatDateTime,
+  METODOS_PAGO,
+  ESTADOS_REP,
+} from "../utils/helpers";
 import { cajaService } from "../services/caja.service";
 import { useAuth } from "../context/AuthContext";
 import OrdenReparacion from "../components/ui/OrdenReparacion";
-
-const ESTADOS_REP = {
-  en_diagnostico: {
-    label: "En diagnóstico",
-    color: "bg-gray-100 text-gray-700",
-  },
-  ingresada: { label: "Ingresada", color: "bg-blue-100 text-blue-700" },
-  en_reparacion: {
-    label: "En reparación",
-    color: "bg-yellow-100 text-yellow-700",
-  },
-  lista: { label: "Lista para entregar", color: "bg-green-100 text-green-700" },
-  entregada: { label: "Entregada", color: "bg-gray-100 text-gray-500" },
-  cancelada: { label: "Cancelada", color: "bg-red-100 text-red-700" },
-};
+import DetalleReparacion from "../components/ui/DetalleReparacion";
+import MenuAcciones from "../components/ui/MenuAcciones";
 
 function NuevoClienteModal({ onClose, onSave }) {
   const [form, setForm] = useState({
@@ -866,6 +863,89 @@ function PagoModal({ reparacion, onClose, onSave }) {
   );
 }
 
+function construirAcciones({
+  reparacion,
+  siguienteEstado,
+  onEditarTipos,
+  onUpdate,
+  onCancelar,
+  onImprimir,
+}) {
+  return [
+    reparacion.estado === "en_diagnostico" && {
+      label: "Definir reparación",
+      icono: <PenLine size={15} />,
+      onClick: () => onEditarTipos(reparacion),
+    },
+    siguienteEstado && {
+      label: `Pasar a ${ESTADOS_REP[siguienteEstado]?.label}`,
+      icono: <ArrowRight size={15} />,
+      onClick: () => onUpdate(reparacion.id, { estado: siguienteEstado }),
+    },
+    {
+      label: "Imprimir orden",
+      icono: <Printer size={15} />,
+      onClick: () => onImprimir(reparacion),
+    },
+    reparacion.estado !== "entregada" &&
+      reparacion.estado !== "cancelada" && {
+        label: "Cancelar orden",
+        icono: <Ban size={15} />,
+        peligro: true,
+        onClick: () => onCancelar(reparacion.id),
+      },
+  ];
+}
+
+function ModalDetalleReparacion({ reparacion, cliente, onClose, onImprimir }) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-40 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-3xl shadow-xl max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-6 border-b border-gray-100">
+          <h2 className="text-lg font-semibold text-gray-800">
+            Orden {reparacion.numero_orden}
+          </h2>
+          <div className="flex items-center gap-3">
+            <a
+              href={`/reparaciones/${reparacion.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
+            >
+              <ExternalLink size={14} />
+              Pestaña nueva
+            </a>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition"
+            >
+              <X size={18} className="text-gray-500" />
+            </button>
+          </div>
+        </div>
+        <div className="p-6 overflow-y-auto">
+          <DetalleReparacion reparacion={reparacion} cliente={cliente} />
+        </div>
+        <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-xl text-sm hover:bg-gray-50 transition"
+          >
+            Cerrar
+          </button>
+          <button
+            onClick={() => onImprimir(reparacion)}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-800 text-white rounded-xl text-sm hover:bg-gray-900 transition"
+          >
+            <Printer size={16} />
+            Imprimir orden
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FilaReparacion({
   reparacion,
   clientes,
@@ -877,6 +957,7 @@ function FilaReparacion({
   userRol,
   onCancelar,
   onImprimir,
+  onVerDetalle,
 }) {
   const [expandido, setExpandido] = useState(false);
   const cliente = clientes.find((c) => c.id === reparacion.cliente_id);
@@ -899,9 +980,12 @@ function FilaReparacion({
     <>
       <tr className="hover:bg-gray-50 transition">
         <td className="px-6 py-4">
-          <span className="font-medium text-blue-600">
+          <button
+            onClick={() => onVerDetalle(reparacion)}
+            className="font-medium text-blue-600 hover:text-blue-800 hover:underline whitespace-nowrap"
+          >
             {reparacion.numero_orden}
-          </span>
+          </button>
           <p className="text-xs text-gray-400">
             {formatDateTime(reparacion.fecha_ingreso)}
           </p>
@@ -958,24 +1042,6 @@ function FilaReparacion({
         </td>
         <td className="px-6 py-4">
           <div className="flex items-center gap-1 flex-wrap">
-            {reparacion.estado === "en_diagnostico" && (
-              <button
-                onClick={() => onEditarTipos(reparacion)}
-                className="px-2 py-1 text-xs bg-orange-50 text-orange-700 rounded-lg hover:bg-orange-100 transition"
-              >
-                Definir
-              </button>
-            )}
-            {siguienteEstado && (
-              <button
-                onClick={() =>
-                  onUpdate(reparacion.id, { estado: siguienteEstado })
-                }
-                className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition"
-              >
-                → {ESTADOS_REP[siguienteEstado]?.label}
-              </button>
-            )}
             {reparacion.precio_total > 0 &&
               reparacion.saldo_pendiente > 0 &&
               cajaAbierta && (
@@ -994,21 +1060,31 @@ function FilaReparacion({
                   Caja cerrada
                 </span>
               )}
-            {reparacion.estado !== "entregada" &&
-              reparacion.estado !== "cancelada" && (
-                <button
-                  onClick={() => onCancelar(reparacion.id)}
-                  className="px-2 py-1 text-xs bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition"
-                >
-                  Cancelar
-                </button>
-              )}
+            <a
+              href={`/reparaciones/${reparacion.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Ver detalle en pestaña nueva"
+              className="p-1 text-gray-400 hover:text-blue-600"
+            >
+              <ExternalLink size={16} />
+            </a>
             <button
               onClick={() => setExpandido(!expandido)}
               className="p-1 text-gray-400 hover:text-gray-600"
             >
               {expandido ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
+            <MenuAcciones
+              acciones={construirAcciones({
+                reparacion,
+                siguienteEstado,
+                onEditarTipos,
+                onUpdate,
+                onCancelar,
+                onImprimir,
+              })}
+            />
           </div>
         </td>
       </tr>
@@ -1111,14 +1187,6 @@ function FilaReparacion({
                 )}
               </div>
             </div>
-            <div className="mt-3 flex justify-end">
-              <button
-                onClick={() => onImprimir(reparacion)}
-                className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 text-white rounded-lg text-xs hover:bg-gray-800 transition"
-              >
-                🖨️ Imprimir orden
-              </button>
-            </div>
           </td>
         </tr>
       )}
@@ -1137,6 +1205,7 @@ function CardReparacionMobile({
   userRol,
   onCancelar,
   onImprimir,
+  onVerDetalle,
 }) {
   const [expandido, setExpandido] = useState(false);
   const cliente = clientes.find((c) => c.id === reparacion.cliente_id);
@@ -1159,9 +1228,12 @@ function CardReparacionMobile({
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       <div className="p-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="font-medium text-blue-600">
+          <button
+            onClick={() => onVerDetalle(reparacion)}
+            className="font-medium text-blue-600 hover:underline"
+          >
             {reparacion.numero_orden}
-          </span>
+          </button>
           <span
             className={`px-2 py-1 rounded-lg text-xs font-medium ${estadoInfo.color}`}
           >
@@ -1208,26 +1280,7 @@ function CardReparacionMobile({
           </p>
         )}
 
-        <div className="flex flex-wrap gap-2">
-          {reparacion.estado === "en_diagnostico" && (
-            <button
-              onClick={() => onEditarTipos(reparacion)}
-              className="px-3 py-1.5 text-xs bg-orange-50 text-orange-700 rounded-lg hover:bg-orange-100 transition"
-            >
-              Definir reparación
-            </button>
-          )}
-          {siguienteEstado && (
-            <button
-              onClick={() =>
-                onUpdate(reparacion.id, { estado: siguienteEstado })
-              }
-              className="px-3 py-1.5 text-xs bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition"
-            >
-              → {ESTADOS_REP[siguienteEstado]?.label}
-            </button>
-          )}
-
+        <div className="flex flex-wrap items-center gap-2">
           {reparacion.precio_total > 0 &&
             reparacion.saldo_pendiente > 0 &&
             cajaAbierta && (
@@ -1252,15 +1305,27 @@ function CardReparacionMobile({
           >
             {expandido ? "Ocultar" : "Ver más"}
           </button>
-          {reparacion.estado !== "entregada" &&
-            reparacion.estado !== "cancelada" && (
-              <button
-                onClick={() => onCancelar(reparacion.id)}
-                className="px-3 py-1.5 text-xs bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition"
-              >
-                Cancelar
-              </button>
-            )}
+          <a
+            href={`/reparaciones/${reparacion.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Ver detalle en pestaña nueva"
+            className="p-1.5 text-gray-400 hover:text-blue-600"
+          >
+            <ExternalLink size={16} />
+          </a>
+          <div className="ml-auto">
+            <MenuAcciones
+              acciones={construirAcciones({
+                reparacion,
+                siguienteEstado,
+                onEditarTipos,
+                onUpdate,
+                onCancelar,
+                onImprimir,
+              })}
+            />
+          </div>
         </div>
       </div>
 
@@ -1320,14 +1385,6 @@ function CardReparacionMobile({
           )}
         </div>
       )}
-      <div className="mt-3 flex justify-end">
-        <button
-          onClick={() => onImprimir(reparacion)}
-          className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 text-white rounded-lg text-xs hover:bg-gray-800 transition"
-        >
-          🖨️ Imprimir orden
-        </button>
-      </div>
     </div>
   );
 }
@@ -1705,6 +1762,7 @@ export default function Reparaciones() {
   const [cajaAbierta, setCajaAbierta] = useState(false);
   const { user } = useAuth();
   const [showOrden, setShowOrden] = useState(null);
+  const [reparacionDetalle, setReparacionDetalle] = useState(null);
 
   const fetchData = async () => {
     try {
@@ -1956,6 +2014,7 @@ export default function Reparaciones() {
                         userRol={user?.rol}
                         onCancelar={handleCancelar}
                         onImprimir={(r) => setShowOrden(r)}
+                        onVerDetalle={setReparacionDetalle}
                       />
                     ))}
                   </tbody>
@@ -1977,6 +2036,7 @@ export default function Reparaciones() {
                     userRol={user?.rol}
                     onCancelar={handleCancelar}
                     onImprimir={(r) => setShowOrden(r)}
+                        onVerDetalle={setReparacionDetalle}
                   />
                 ))}
               </div>
@@ -2014,6 +2074,14 @@ export default function Reparaciones() {
             />
           )}
         </div>
+      )}
+      {reparacionDetalle && (
+        <ModalDetalleReparacion
+          reparacion={reparacionDetalle}
+          cliente={clientes.find((c) => c.id === reparacionDetalle.cliente_id)}
+          onClose={() => setReparacionDetalle(null)}
+          onImprimir={(r) => setShowOrden(r)}
+        />
       )}
       {showOrden && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

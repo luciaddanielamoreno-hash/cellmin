@@ -40,6 +40,21 @@ export const ESTADOS_REPARACION = {
   entregada: { label: "Entregada", color: "bg-gray-100 text-gray-800" },
 };
 
+export const ESTADOS_REP = {
+  en_diagnostico: {
+    label: "En diagnóstico",
+    color: "bg-gray-100 text-gray-700",
+  },
+  ingresada: { label: "Ingresada", color: "bg-blue-100 text-blue-700" },
+  en_reparacion: {
+    label: "En reparación",
+    color: "bg-yellow-100 text-yellow-700",
+  },
+  lista: { label: "Lista para entregar", color: "bg-green-100 text-green-700" },
+  entregada: { label: "Entregada", color: "bg-gray-100 text-gray-500" },
+  cancelada: { label: "Cancelada", color: "bg-red-100 text-red-700" },
+};
+
 export const METODOS_PAGO = [
   { value: "efectivo", label: "Efectivo" },
   { value: "transferencia", label: "Transferencia" },

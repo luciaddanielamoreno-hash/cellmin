@@ -14,6 +14,7 @@ import Ventas from "./pages/Ventas";
 import VentaDetalle from "./pages/VentaDetalle";
 import Caja from "./pages/Caja";
 import Reparaciones from "./pages/Reparaciones";
+import ReparacionDetalle from "./pages/ReparacionDetalle";
 import TiposReparacion from "./pages/TiposReparacion";
 import Usuarios from "./pages/Usuarios";
 import Reportes from "./pages/Reportes";
@@ -128,6 +129,14 @@ export default function App() {
         element={
           <PrivateLayout>
             <Reparaciones />
+          </PrivateLayout>
+        }
+      />
+      <Route
+        path="/reparaciones/:id"
+        element={
+          <PrivateLayout>
+            <ReparacionDetalle />
           </PrivateLayout>
         }
       />

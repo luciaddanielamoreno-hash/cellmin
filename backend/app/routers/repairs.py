@@ -43,6 +43,8 @@ async def get_pending_repairs(current_user: dict = Depends(get_current_user)):
 async def get_repair(repair_id: str, current_user: dict = Depends(get_current_user)):
     check_permission(current_user["role"], "reparaciones:read")
     db = get_db()
+    if not ObjectId.is_valid(repair_id):
+        raise HTTPException(status_code=404, detail="Reparación no encontrada")
     repair = await db.reparaciones.find_one({"_id": ObjectId(repair_id)})
     if not repair:
         raise HTTPException(status_code=404, detail="Reparación no encontrada")

@@ -11,12 +11,15 @@ import {
   Phone,
   Mail,
   User,
+  ExternalLink,
+  X,
 } from "lucide-react";
 import { comprasService } from "../services/compras.service";
 import { proveedoresService } from "../services/proveedores.service";
 import { productosService } from "../services/productos.service";
 import toast from "react-hot-toast";
 import { formatCurrency, formatDateTime } from "../utils/helpers";
+import DetalleCompra from "../components/ui/DetalleCompra";
 
 function ProveedorModal({ proveedor, onClose, onSave }) {
   const [form, setForm] = useState({
@@ -501,7 +504,49 @@ function ModalConfirmar({ mensaje, onConfirmar, onCancelar }) {
   );
 }
 
-function FilaCompra({ compra, proveedores, onCancel }) {
+function ModalDetalleCompra({ compra, proveedor, onClose }) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-3xl shadow-xl max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-6 border-b border-gray-100">
+          <h2 className="text-lg font-semibold text-gray-800">
+            Compra {compra.numero_compra}
+          </h2>
+          <div className="flex items-center gap-3">
+            <a
+              href={`/compras/${compra._id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
+            >
+              <ExternalLink size={14} />
+              Pestaña nueva
+            </a>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition"
+            >
+              <X size={18} className="text-gray-500" />
+            </button>
+          </div>
+        </div>
+        <div className="p-6 overflow-y-auto">
+          <DetalleCompra compra={compra} proveedor={proveedor} />
+        </div>
+        <div className="flex justify-end p-6 border-t border-gray-100">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-xl text-sm hover:bg-gray-50 transition"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FilaCompra({ compra, proveedores, onCancel, onVerDetalle }) {
   const [expandido, setExpandido] = useState(false);
   const proveedor = proveedores.find((p) => p.id === compra.proveedor_id);
   const cancelada = compra.estado === "cancelada";
@@ -513,9 +558,15 @@ function FilaCompra({ compra, proveedores, onCancel }) {
         onClick={() => setExpandido(!expandido)}
       >
         <td className="px-6 py-4">
-          <span className="font-medium text-blue-600">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onVerDetalle(compra);
+            }}
+            className="font-medium text-blue-600 hover:text-blue-800 hover:underline whitespace-nowrap"
+          >
             {compra.numero_compra}
-          </span>
+          </button>
         </td>
         <td className="px-6 py-4 text-sm text-gray-700">
           {proveedor?.nombre || "-"}
@@ -555,6 +606,16 @@ function FilaCompra({ compra, proveedores, onCancel }) {
                 Cancelar
               </button>
             )}
+            <a
+              href={`/compras/${compra._id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              title="Ver detalle en pestaña nueva"
+              className="p-1 text-gray-400 hover:text-blue-600"
+            >
+              <ExternalLink size={16} />
+            </a>
             {expandido ? (
               <ChevronUp size={16} className="text-gray-400" />
             ) : (
@@ -622,7 +683,7 @@ function FilaCompra({ compra, proveedores, onCancel }) {
   );
 }
 
-function CardCompraMobile({ compra, proveedor, onCancel }) {
+function CardCompraMobile({ compra, proveedor, onCancel, onVerDetalle }) {
   const [expandido, setExpandido] = useState(false);
   const cancelada = compra.estado === "cancelada";
 
@@ -630,9 +691,12 @@ function CardCompraMobile({ compra, proveedor, onCancel }) {
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       <div className="p-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="font-medium text-blue-600">
+          <button
+            onClick={() => onVerDetalle(compra)}
+            className="font-medium text-blue-600 hover:underline"
+          >
             {compra.numero_compra}
-          </span>
+          </button>
           <span
             className={`text-sm font-bold ${cancelada ? "text-gray-400 line-through" : "text-gray-800"}`}
           >
@@ -668,6 +732,15 @@ function CardCompraMobile({ compra, proveedor, onCancel }) {
             {expandido ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             {expandido ? "Ocultar detalle" : "Ver detalle"}
           </button>
+          <a
+            href={`/compras/${compra._id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Ver detalle en pestaña nueva"
+            className="p-1 text-gray-400 hover:text-blue-600"
+          >
+            <ExternalLink size={16} />
+          </a>
           {!cancelada && (
             <button
               onClick={() => onCancel(compra._id, compra.numero_compra)}
@@ -1007,6 +1080,7 @@ export default function Compras() {
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [compraCancelar, setCompraCancelar] = useState(null);
+  const [compraDetalle, setCompraDetalle] = useState(null);
 
   const fetchData = async () => {
     try {
@@ -1152,6 +1226,7 @@ export default function Compras() {
                         key={compra._id}
                         compra={compra}
                         proveedores={proveedores}
+                        onVerDetalle={setCompraDetalle}
                         onCancel={(id, numero) =>
                           setCompraCancelar({ id, numero })
                         }
@@ -1172,6 +1247,7 @@ export default function Compras() {
                       key={compra._id}
                       compra={compra}
                       proveedor={proveedor}
+                      onVerDetalle={setCompraDetalle}
                       onCancel={(id, numero) =>
                         setCompraCancelar({ id, numero })
                       }
@@ -1191,6 +1267,16 @@ export default function Compras() {
             />
           )}
         </div>
+      )}
+
+      {compraDetalle && (
+        <ModalDetalleCompra
+          compra={compraDetalle}
+          proveedor={proveedores.find(
+            (p) => p.id === compraDetalle.proveedor_id,
+          )}
+          onClose={() => setCompraDetalle(null)}
+        />
       )}
 
       {compraCancelar && (

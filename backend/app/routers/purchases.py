@@ -26,6 +26,17 @@ async def get_purchases(current_user: dict = Depends(get_current_user)):
     purchases = await db.compras.find().sort("fecha", -1).to_list(500)
     return [{**p, "_id": str(p["_id"])} for p in purchases]
 
+@router.get("/{purchase_id}")
+async def get_purchase(purchase_id: str, current_user: dict = Depends(get_current_user)):
+    check_permission(current_user["role"], "*")
+    db = get_db()
+    if not ObjectId.is_valid(purchase_id):
+        raise HTTPException(status_code=404, detail="Compra no encontrada")
+    compra = await db.compras.find_one({"_id": ObjectId(purchase_id)})
+    if not compra:
+        raise HTTPException(status_code=404, detail="Compra no encontrada")
+    return {**compra, "_id": str(compra["_id"])}
+
 @router.post("/")
 async def create_purchase(purchase: PurchaseCreate, current_user: dict = Depends(get_current_user)):
     check_permission(current_user["role"], "*")

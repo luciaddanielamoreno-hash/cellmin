@@ -10,6 +10,7 @@ import Productos from "./pages/Productos";
 import Proveedores from "./pages/Proveedores";
 import Stock from "./pages/Stock";
 import Compras from "./pages/Compras";
+import CompraDetalle from "./pages/CompraDetalle";
 import Ventas from "./pages/Ventas";
 import VentaDetalle from "./pages/VentaDetalle";
 import Caja from "./pages/Caja";
@@ -97,6 +98,14 @@ export default function App() {
         element={
           <PrivateLayout>
             <Compras />
+          </PrivateLayout>
+        }
+      />
+      <Route
+        path="/compras/:id"
+        element={
+          <PrivateLayout>
+            <CompraDetalle />
           </PrivateLayout>
         }
       />

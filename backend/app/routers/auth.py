@@ -3,7 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from app.database import get_db
 from app.utils.auth import verify_password, create_access_token, get_current_user
 from bson import ObjectId
-from app.routers.audit import registrar_auditoria
+from app.utils.logger import registrar_auditoria
 
 router = APIRouter()
 

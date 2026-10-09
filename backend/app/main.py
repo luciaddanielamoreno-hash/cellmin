@@ -8,7 +8,11 @@ from app.routers import (
     sales, cash_register, repairs, reports, backup
 )
 from app.routers import repair_types
-from app.routers import audit
+import time
+import traceback
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from app.utils.logger import log_accesos, log_errores
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -44,7 +48,25 @@ app.include_router(repairs.router,       prefix="/api/repairs",     tags=["Repar
 app.include_router(reports.router,       prefix="/api/reports",     tags=["Reportes"])
 app.include_router(backup.router,        prefix="/api/backup",      tags=["Backup"])
 app.include_router(repair_types.router, prefix="/api/repair-types", tags=["Tipos de Reparación"])
-app.include_router(audit.router, prefix="/api/audit", tags=["Auditoría"])
+
+
+@app.middleware("http")
+async def registrar_pedidos(request: Request, call_next):
+    inicio = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        log_errores.error(
+            f"{request.method} {request.url.path}\n{traceback.format_exc()}"
+        )
+        return JSONResponse(status_code=500, content={"detail": "Error interno del servidor"})
+    ms = (time.perf_counter() - inicio) * 1000
+    cliente = request.client.host if request.client else "-"
+    log_accesos.info(
+        f"{cliente} {request.method} {request.url.path} {response.status_code} {ms:.0f}ms"
+    )
+    return response
+
 
 @app.get("/")
 async def root():

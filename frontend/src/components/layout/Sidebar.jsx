@@ -13,7 +13,6 @@ import {
   Menu,
   X,
   ArrowLeftRight,
-  Shield,
 } from "lucide-react";
 
 const allMenuItems = [
@@ -75,12 +74,6 @@ const allMenuItems = [
     path: "/usuarios",
     label: "Usuarios",
     icon: Users,
-    roles: ["administrador"],
-  },
-  {
-    path: "/auditoria",
-    label: "Auditoría",
-    icon: Shield,
     roles: ["administrador"],
   },
 ];

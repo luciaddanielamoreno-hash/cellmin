@@ -11,3 +11,5 @@ frontend/dist/
 # Sistema
 .DS_Store
 *.pyc
+# Logs del sistema
+backend/logs/

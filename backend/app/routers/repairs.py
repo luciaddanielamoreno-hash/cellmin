@@ -5,7 +5,7 @@ from app.utils.auth import get_current_user
 from app.utils.permissions import check_permission
 from bson import ObjectId
 from datetime import datetime, timedelta
-from app.routers.audit import registrar_auditoria
+from app.utils.logger import registrar_auditoria
 
 router = APIRouter()
 

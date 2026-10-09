@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from app.database import get_db
 from app.utils.auth import get_current_user
 from app.utils.permissions import check_permission
-from app.routers.audit import registrar_auditoria
+from app.utils.logger import registrar_auditoria
 from bson import ObjectId
 from datetime import datetime
 from app.models.purchase import PurchaseCreate

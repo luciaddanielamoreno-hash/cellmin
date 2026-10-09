@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { productosService } from "../services/productos.service";
 import toast from "react-hot-toast";
+import ThOrdenable from "../components/ui/ThOrdenable";
+import { useTabla } from "../hooks/useTabla";
 import { formatCurrency } from "../utils/helpers";
 import { exportarListaPrecios } from "../utils/exportExcel";
 import Paginacion from "../components/ui/Paginacion";
@@ -899,6 +901,15 @@ function GestionCategorias() {
     }
   };
 
+
+  const tabla = useTabla(filtered, {
+    porPagina: 20,
+    ordenInicial: { campo: "nombre", dir: "asc" },
+    accessors: {
+      padre: (c) => (c.categoria_padre_id ? getNombrePadre(c.categoria_padre_id) : null)
+    },
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
@@ -953,25 +964,19 @@ function GestionCategorias() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Nombre
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Descripción
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Categoría Padre
-                  </th>
+                  <ThOrdenable campo="nombre" tabla={tabla} className="px-6 py-3">Nombre</ThOrdenable>
+                  <ThOrdenable campo="descripcion" tabla={tabla} className="px-6 py-3">Descripción</ThOrdenable>
+                  <ThOrdenable campo="padre" tabla={tabla} className="px-6 py-3">Categoría Padre</ThOrdenable>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Acciones
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filtered.map((categoria) => (
+                {tabla.filas.map((categoria) => (
                   <tr
                     key={categoria.id}
-                    className="hover:bg-gray-50 transition"
+                    className="hover:bg-gray-50 transition-[background-color]"
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
@@ -1033,7 +1038,7 @@ function GestionCategorias() {
 
           {/* Mobile */}
           <div className="md:hidden space-y-3">
-            {filtered.map((categoria) => (
+            {tabla.filas.map((categoria) => (
               <div
                 key={categoria.id}
                 className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100"
@@ -1096,6 +1101,13 @@ function GestionCategorias() {
               </div>
             ))}
           </div>
+
+          <Paginacion
+            total={tabla.total}
+            porPagina={tabla.porPagina}
+            paginaActual={tabla.pagina}
+            onChange={tabla.setPagina}
+          />
         </>
       )}
 
@@ -1121,8 +1133,6 @@ export default function Productos() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [selectedProducto, setSelectedProducto] = useState(null);
-  const [paginaActual, setPaginaActual] = useState(1);
-  const POR_PAGINA = 20;
   const [filtros, setFiltros] = useState({
     nombre: "",
     categoria_id: "",
@@ -1150,10 +1160,6 @@ export default function Productos() {
   useEffect(() => {
     fetchData();
   }, []);
-
-  useEffect(() => {
-    setPaginaActual(1);
-  }, [filtros]);
 
   const handleDelete = async (id) => {
     const producto = productos.find((p) => p.id === id);
@@ -1232,10 +1238,23 @@ export default function Productos() {
     toast.success(`Lista de precios exportada (${filtered.length} productos)`);
   };
 
-  const productosPaginados = filtered.slice(
-    (paginaActual - 1) * POR_PAGINA,
-    paginaActual * POR_PAGINA,
-  );
+  const nombreCategoria = (id) =>
+    categorias.find((c) => c.id === id)?.nombre || "";
+  const stockTotal = (p) =>
+    p.tiene_variantes
+      ? (p.variantes || []).reduce((a, v) => a + (v.stock_actual || 0), 0)
+      : p.stock_actual || 0;
+
+  const tabla = useTabla(filtered, {
+    porPagina: 20,
+    ordenInicial: { campo: "nombre", dir: "asc" },
+    accessors: {
+      categoria: (p) => nombreCategoria(p.categoria_id),
+      precio: getPrecioVenta,
+      stock: stockTotal,
+    },
+  });
+  const productosPaginados = tabla.filas;
 
   return (
     <div className="space-y-6">
@@ -1453,18 +1472,10 @@ export default function Productos() {
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                        Producto
-                      </th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                        Categoría
-                      </th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                        Precio Venta
-                      </th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                        Stock
-                      </th>
+                      <ThOrdenable campo="nombre" tabla={tabla} className="px-6 py-3">Producto</ThOrdenable>
+                      <ThOrdenable campo="categoria" tabla={tabla} className="px-6 py-3">Categoría</ThOrdenable>
+                      <ThOrdenable campo="precio" tabla={tabla} className="px-6 py-3">Precio Venta</ThOrdenable>
+                      <ThOrdenable campo="stock" tabla={tabla} className="px-6 py-3">Stock</ThOrdenable>
                       <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                         Acciones
                       </th>
@@ -1576,10 +1587,10 @@ export default function Productos() {
               </div>
 
               <Paginacion
-                total={filtered.length}
-                porPagina={POR_PAGINA}
-                paginaActual={paginaActual}
-                onChange={setPaginaActual}
+                total={tabla.total}
+                porPagina={tabla.porPagina}
+                paginaActual={tabla.pagina}
+                onChange={tabla.setPagina}
               />
             </>
           )}

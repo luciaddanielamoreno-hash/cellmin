@@ -2,6 +2,9 @@ import { useState, useEffect } from "react";
 import { Plus, Edit, Trash2, Wrench, ToggleLeft } from "lucide-react";
 import { tiposReparacionService } from "../services/tiposReparacion.service";
 import toast from "react-hot-toast";
+import Paginacion from "../components/ui/Paginacion";
+import ThOrdenable from "../components/ui/ThOrdenable";
+import { useTabla } from "../hooks/useTabla";
 import { formatCurrency } from "../utils/helpers";
 
 function TipoModal({ tipo, onClose, onSave }) {
@@ -143,6 +146,15 @@ export default function TiposReparacion() {
     }
   };
 
+
+  const tabla = useTabla(tipos, {
+    porPagina: 20,
+    ordenInicial: { campo: "nombre", dir: "asc" },
+    accessors: {
+
+    },
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -180,22 +192,16 @@ export default function TiposReparacion() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Nombre
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Descripción
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Precio
-                  </th>
+                  <ThOrdenable campo="nombre" tabla={tabla} className="px-6 py-3">Nombre</ThOrdenable>
+                  <ThOrdenable campo="descripcion" tabla={tabla} className="px-6 py-3">Descripción</ThOrdenable>
+                  <ThOrdenable campo="precio" tabla={tabla} className="px-6 py-3">Precio</ThOrdenable>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Acciones
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {tipos.map((tipo) => (
+                {tabla.filas.map((tipo) => (
                   <tr key={tipo.id} className="hover:bg-gray-50 transition-[background-color]">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
@@ -255,7 +261,7 @@ export default function TiposReparacion() {
 
           {/* Mobile */}
           <div className="md:hidden space-y-3">
-            {tipos.map((tipo) => (
+            {tabla.filas.map((tipo) => (
               <div
                 key={tipo.id}
                 className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100"
@@ -315,6 +321,13 @@ export default function TiposReparacion() {
               </div>
             ))}
           </div>
+
+          <Paginacion
+            total={tabla.total}
+            porPagina={tabla.porPagina}
+            paginaActual={tabla.pagina}
+            onChange={tabla.setPagina}
+          />
         </>
       )}
 

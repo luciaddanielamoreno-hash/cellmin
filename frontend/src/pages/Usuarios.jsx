@@ -10,6 +10,9 @@ import {
 } from "lucide-react";
 import { usuariosService } from "../services/usuarios.service";
 import toast from "react-hot-toast";
+import Paginacion from "../components/ui/Paginacion";
+import ThOrdenable from "../components/ui/ThOrdenable";
+import { useTabla } from "../hooks/useTabla";
 
 const ROLES = [
   {
@@ -262,6 +265,16 @@ export default function Usuarios() {
       color: "bg-gray-100 text-gray-700",
     };
 
+
+  const tabla = useTabla(filtered, {
+    porPagina: 20,
+    ordenInicial: { campo: "nombre", dir: "asc" },
+    accessors: {
+      sucursal: (u) => (u.sucursales?.length > 1 ? "Ambas" : u.sucursales?.[0]),
+      estado: (u) => (u.activo ? 1 : 0)
+    },
+  });
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -338,33 +351,23 @@ export default function Usuarios() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Usuario
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Email
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Rol
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Sucursal
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Estado
-                  </th>
+                  <ThOrdenable campo="nombre" tabla={tabla} className="px-6 py-3">Usuario</ThOrdenable>
+                  <ThOrdenable campo="email" tabla={tabla} className="px-6 py-3">Email</ThOrdenable>
+                  <ThOrdenable campo="rol" tabla={tabla} className="px-6 py-3">Rol</ThOrdenable>
+                  <ThOrdenable campo="sucursal" tabla={tabla} className="px-6 py-3">Sucursal</ThOrdenable>
+                  <ThOrdenable campo="estado" tabla={tabla} className="px-6 py-3">Estado</ThOrdenable>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Acciones
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filtered.map((usuario) => {
+                {tabla.filas.map((usuario) => {
                   const rolInfo = getRolInfo(usuario.rol);
                   return (
                     <tr
                       key={usuario.id}
-                      className="hover:bg-gray-50 transition"
+                      className="hover:bg-gray-50 transition-[background-color]"
                     >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
@@ -450,7 +453,7 @@ export default function Usuarios() {
 
           {/* Mobile */}
           <div className="md:hidden space-y-3">
-            {filtered.map((usuario) => {
+            {tabla.filas.map((usuario) => {
               const rolInfo = getRolInfo(usuario.rol);
               return (
                 <div
@@ -531,6 +534,13 @@ export default function Usuarios() {
               );
             })}
           </div>
+
+          <Paginacion
+            total={tabla.total}
+            porPagina={tabla.porPagina}
+            paginaActual={tabla.pagina}
+            onChange={tabla.setPagina}
+          />
         </>
       )}
 

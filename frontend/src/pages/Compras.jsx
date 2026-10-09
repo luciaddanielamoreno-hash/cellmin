@@ -18,6 +18,9 @@ import { comprasService } from "../services/compras.service";
 import { proveedoresService } from "../services/proveedores.service";
 import { productosService } from "../services/productos.service";
 import toast from "react-hot-toast";
+import Paginacion from "../components/ui/Paginacion";
+import ThOrdenable from "../components/ui/ThOrdenable";
+import { useTabla } from "../hooks/useTabla";
 import { formatCurrency, formatDateTime } from "../utils/helpers";
 import DetalleCompra from "../components/ui/DetalleCompra";
 
@@ -836,6 +839,15 @@ function GestionProveedores() {
     }
   };
 
+
+  const tabla = useTabla(filtered, {
+    porPagina: 20,
+    ordenInicial: { campo: "nombre", dir: "asc" },
+    accessors: {
+
+    },
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
@@ -889,28 +901,20 @@ function GestionProveedores() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Proveedor
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    CUIT
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Contacto
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Teléfono
-                  </th>
+                  <ThOrdenable campo="nombre" tabla={tabla} className="px-6 py-3">Proveedor</ThOrdenable>
+                  <ThOrdenable campo="cuit" tabla={tabla} className="px-6 py-3">CUIT</ThOrdenable>
+                  <ThOrdenable campo="contacto" tabla={tabla} className="px-6 py-3">Contacto</ThOrdenable>
+                  <ThOrdenable campo="telefono" tabla={tabla} className="px-6 py-3">Teléfono</ThOrdenable>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Acciones
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filtered.map((proveedor) => (
+                {tabla.filas.map((proveedor) => (
                   <tr
                     key={proveedor.id}
-                    className="hover:bg-gray-50 transition"
+                    className="hover:bg-gray-50 transition-[background-color]"
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -980,7 +984,7 @@ function GestionProveedores() {
 
           {/* Mobile */}
           <div className="md:hidden space-y-3">
-            {filtered.map((proveedor) => (
+            {tabla.filas.map((proveedor) => (
               <div
                 key={proveedor.id}
                 className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100"
@@ -1055,6 +1059,13 @@ function GestionProveedores() {
               </div>
             ))}
           </div>
+
+          <Paginacion
+            total={tabla.total}
+            porPagina={tabla.porPagina}
+            paginaActual={tabla.pagina}
+            onChange={tabla.setPagina}
+          />
         </>
       )}
 
@@ -1123,6 +1134,17 @@ export default function Compras() {
       setCompraCancelar(null);
     }
   };
+
+
+  const tabla = useTabla(filtered, {
+    porPagina: 20,
+    ordenInicial: { campo: "fecha", dir: "desc" },
+    accessors: {
+      proveedor: (c) => proveedores.find((p) => p.id === c.proveedor_id)?.nombre || "",
+      cantidad: (c) => c.items?.length || 0,
+      fecha: (c) => (c.fecha ? new Date(c.fecha).getTime() : null)
+    },
+  });
 
   return (
     <div className="space-y-6">
@@ -1199,29 +1221,17 @@ export default function Compras() {
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                        Número
-                      </th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                        Proveedor
-                      </th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                        Cant.
-                      </th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                        Total
-                      </th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                        Fecha
-                      </th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                        Estado
-                      </th>
+                      <ThOrdenable campo="numero_compra" tabla={tabla} className="px-6 py-3">Número</ThOrdenable>
+                      <ThOrdenable campo="proveedor" tabla={tabla} className="px-6 py-3">Proveedor</ThOrdenable>
+                      <ThOrdenable campo="cantidad" tabla={tabla} className="px-6 py-3">Cant.</ThOrdenable>
+                      <ThOrdenable campo="total" tabla={tabla} className="px-6 py-3">Total</ThOrdenable>
+                      <ThOrdenable campo="fecha" tabla={tabla} className="px-6 py-3">Fecha</ThOrdenable>
+                      <ThOrdenable campo="estado" tabla={tabla} className="px-6 py-3">Estado</ThOrdenable>
                       <th className="px-6 py-3"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {filtered.map((compra) => (
+                    {tabla.filas.map((compra) => (
                       <FilaCompra
                         key={compra._id}
                         compra={compra}
@@ -1238,7 +1248,7 @@ export default function Compras() {
 
               {/* Mobile */}
               <div className="md:hidden space-y-3">
-                {filtered.map((compra) => {
+                {tabla.filas.map((compra) => {
                   const proveedor = proveedores.find(
                     (p) => p.id === compra.proveedor_id,
                   );
@@ -1255,6 +1265,13 @@ export default function Compras() {
                   );
                 })}
               </div>
+
+          <Paginacion
+            total={tabla.total}
+            porPagina={tabla.porPagina}
+            paginaActual={tabla.pagina}
+            onChange={tabla.setPagina}
+          />
             </>
           )}
           {showModal && (

@@ -12,6 +12,9 @@ import {
 } from "lucide-react";
 import { cajaService } from "../services/caja.service";
 import toast from "react-hot-toast";
+import Paginacion from "../components/ui/Paginacion";
+import ThOrdenable from "../components/ui/ThOrdenable";
+import { useTabla } from "../hooks/useTabla";
 import { useAuth } from "../context/AuthContext";
 import {
   formatCurrency,
@@ -850,6 +853,17 @@ export default function Caja() {
       return fecha.toLowerCase().includes(busquedaHistorial.toLowerCase());
     });
 
+  const tablaMov = useTabla(caja?.movimientos_completos || [], {
+    porPagina: 15,
+    ordenInicial: { campo: "fecha", dir: "desc" },
+    accessors: {
+      fecha: (m) => (m.fecha ? new Date(m.fecha).getTime() : null),
+      monto: (m) => (m.tipo === "ingreso" ? m.monto : -m.monto),
+    },
+  });
+
+  const tablaHist = useTabla(historialFiltrado, { porPagina: 10 });
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -975,26 +989,16 @@ export default function Caja() {
                       <table className="w-full">
                         <thead className="bg-gray-50 border-b border-gray-100">
                           <tr>
-                            <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                              Concepto
-                            </th>
-                            <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                              Descripción
-                            </th>
-                            <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                              Método
-                            </th>
-                            <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                              Monto
-                            </th>
-                            <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                              Fecha
-                            </th>
+                            <ThOrdenable campo="concepto" tabla={tablaMov} className="px-6 py-3">Concepto</ThOrdenable>
+                            <ThOrdenable campo="descripcion" tabla={tablaMov} className="px-6 py-3">Descripción</ThOrdenable>
+                            <ThOrdenable campo="metodo_pago" tabla={tablaMov} className="px-6 py-3">Método</ThOrdenable>
+                            <ThOrdenable campo="monto" tabla={tablaMov} className="px-6 py-3">Monto</ThOrdenable>
+                            <ThOrdenable campo="fecha" tabla={tablaMov} className="px-6 py-3">Fecha</ThOrdenable>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
-                          {caja.movimientos_completos.map((m, i) => (
-                            <tr key={i} className="hover:bg-gray-50">
+                          {tablaMov.filas.map((m, i) => (
+                            <tr key={i} className="hover:bg-gray-50 transition-[background-color]">
                               <td className="px-6 py-3">
                                 <span
                                   className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${
@@ -1045,7 +1049,7 @@ export default function Caja() {
 
                     {/* Mobile */}
                     <div className="md:hidden divide-y divide-gray-100">
-                      {caja.movimientos_completos.map((m, i) => (
+                      {tablaMov.filas.map((m, i) => (
                         <div
                           key={i}
                           className="p-4 flex items-center justify-between"
@@ -1094,6 +1098,14 @@ export default function Caja() {
                         </div>
                       ))}
                     </div>
+
+                    <Paginacion
+                      total={tablaMov.total}
+                      porPagina={tablaMov.porPagina}
+                      paginaActual={tablaMov.pagina}
+                      onChange={tablaMov.setPagina}
+                      compacto
+                    />
                   </>
                 )}
               </div>
@@ -1121,7 +1133,9 @@ export default function Caja() {
               No hay cajas cerradas en el historial
             </div>
           ) : (
-            historialFiltrado.map((c, i) => (
+            tablaHist.filas.map((c, idx) => {
+              const i = (tablaHist.pagina - 1) * tablaHist.porPagina + idx;
+              return (
               <div
                 key={i}
                 className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
@@ -1251,8 +1265,15 @@ export default function Caja() {
                   </div>
                 )}
               </div>
-            ))
+              );
+            })
           )}
+          <Paginacion
+            total={tablaHist.total}
+            porPagina={tablaHist.porPagina}
+            paginaActual={tablaHist.pagina}
+            onChange={tablaHist.setPagina}
+          />
         </div>
       )}
 

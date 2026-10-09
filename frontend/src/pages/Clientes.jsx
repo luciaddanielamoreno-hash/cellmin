@@ -11,6 +11,9 @@ import {
 } from "lucide-react";
 import { clientesService } from "../services/clientes.service";
 import toast from "react-hot-toast";
+import Paginacion from "../components/ui/Paginacion";
+import ThOrdenable from "../components/ui/ThOrdenable";
+import { useTabla } from "../hooks/useTabla";
 
 function ClienteModal({ cliente, onClose, onSave }) {
   const [form, setForm] = useState({
@@ -216,6 +219,15 @@ export default function Clientes() {
     return true;
   });
 
+
+  const tabla = useTabla(filtered, {
+    porPagina: 20,
+    ordenInicial: { campo: "nombre", dir: "asc" },
+    accessors: {
+      nombre: (c) => `${c.nombre} ${c.apellido || ""}`.trim()
+    },
+  });
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -278,25 +290,17 @@ export default function Clientes() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Cliente
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    DNI
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Teléfono
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Email
-                  </th>
+                  <ThOrdenable campo="nombre" tabla={tabla} className="px-6 py-3">Cliente</ThOrdenable>
+                  <ThOrdenable campo="dni" tabla={tabla} className="px-6 py-3">DNI</ThOrdenable>
+                  <ThOrdenable campo="telefono" tabla={tabla} className="px-6 py-3">Teléfono</ThOrdenable>
+                  <ThOrdenable campo="email" tabla={tabla} className="px-6 py-3">Email</ThOrdenable>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Acciones
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filtered.map((cliente) => (
+                {tabla.filas.map((cliente) => (
                   <tr key={cliente.id} className="hover:bg-gray-50 transition-[background-color]">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -360,7 +364,7 @@ export default function Clientes() {
 
           {/* Vista mobile */}
           <div className="md:hidden space-y-3">
-            {filtered.map((cliente) => (
+            {tabla.filas.map((cliente) => (
               <div
                 key={cliente.id}
                 className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100"
@@ -427,6 +431,13 @@ export default function Clientes() {
               </div>
             ))}
           </div>
+
+          <Paginacion
+            total={tabla.total}
+            porPagina={tabla.porPagina}
+            paginaActual={tabla.pagina}
+            onChange={tabla.setPagina}
+          />
         </>
       )}
 

@@ -2,6 +2,9 @@ import { useState, useEffect } from "react";
 import { Plus, Edit, Trash2, Tag, ToggleLeft } from "lucide-react";
 import { categoriasService } from "../services/categorias.service";
 import toast from "react-hot-toast";
+import Paginacion from "../components/ui/Paginacion";
+import ThOrdenable from "../components/ui/ThOrdenable";
+import { useTabla } from "../hooks/useTabla";
 
 function CategoriaModal({ categoria, categorias, onClose, onSave }) {
   const [form, setForm] = useState({
@@ -156,6 +159,15 @@ export default function Categorias() {
     return padre?.nombre || "-";
   };
 
+
+  const tabla = useTabla(categorias, {
+    porPagina: 20,
+    ordenInicial: { campo: "nombre", dir: "asc" },
+    accessors: {
+      padre: (c) => (c.categoria_padre_id ? getNombrePadre(c.categoria_padre_id) : null)
+    },
+  });
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -191,25 +203,19 @@ export default function Categorias() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Nombre
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
-                    Descripción
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
-                    Categoría Padre
-                  </th>
+                  <ThOrdenable campo="nombre" tabla={tabla} className="px-6 py-3">Nombre</ThOrdenable>
+                  <ThOrdenable campo="descripcion" tabla={tabla} className="px-6 py-3 hidden md:table-cell">Descripción</ThOrdenable>
+                  <ThOrdenable campo="padre" tabla={tabla} className="px-6 py-3 hidden md:table-cell">Categoría Padre</ThOrdenable>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Acciones
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {categorias.map((categoria) => (
+                {tabla.filas.map((categoria) => (
                   <tr
                     key={categoria.id}
-                    className="hover:bg-gray-50 transition"
+                    className="hover:bg-gray-50 transition-[background-color]"
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
@@ -271,7 +277,7 @@ export default function Categorias() {
 
           {/* Mobile */}
           <div className="md:hidden space-y-3">
-            {categorias.map((categoria) => (
+            {tabla.filas.map((categoria) => (
               <div
                 key={categoria.id}
                 className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100"
@@ -334,6 +340,13 @@ export default function Categorias() {
               </div>
             ))}
           </div>
+
+          <Paginacion
+            total={tabla.total}
+            porPagina={tabla.porPagina}
+            paginaActual={tabla.pagina}
+            onChange={tabla.setPagina}
+          />
         </>
       )}
 

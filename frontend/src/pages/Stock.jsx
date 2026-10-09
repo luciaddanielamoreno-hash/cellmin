@@ -13,6 +13,8 @@ import { productosService } from "../services/productos.service";
 import toast from "react-hot-toast";
 import { formatCurrency, formatDateTime } from "../utils/helpers";
 import Paginacion from "../components/ui/Paginacion";
+import ThOrdenable from "../components/ui/ThOrdenable";
+import { useTabla } from "../hooks/useTabla";
 import { useAuth } from "../context/AuthContext";
 
 function MovimientoModal({ onClose, onSave }) {
@@ -196,9 +198,6 @@ export default function Stock() {
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("inventario");
   const [showModal, setShowModal] = useState(false);
-  const [paginaMovimientos, setPaginaMovimientos] = useState(1);
-  const [paginaActual, setPaginaActual] = useState(1);
-  const POR_PAGINA = 20;
   const { user } = useAuth();
   const [filtrosMovimientos, setFiltrosMovimientos] = useState({
     busqueda: "",
@@ -233,10 +232,19 @@ export default function Stock() {
 
   const alertas = productos.filter((p) => p.alerta);
 
-  const productosPaginados = filteredProductos.slice(
-    (paginaActual - 1) * POR_PAGINA,
-    paginaActual * POR_PAGINA,
-  );
+  const stockTotal = (p) =>
+    p.tiene_variantes
+      ? (p.variantes || []).reduce((a, v) => a + (v.stock_actual || 0), 0)
+      : p.stock_actual || 0;
+
+  const tablaProductos = useTabla(filteredProductos, {
+    porPagina: 20,
+    ordenInicial: { campo: "nombre", dir: "asc" },
+    accessors: {
+      stock: stockTotal,
+      estado: (p) => (p.alerta ? 0 : 1),
+    },
+  });
   const movimientosFiltrados = movimientos.filter((m) => {
     const producto = productos.find((p) => p.id === m.producto_id);
     if (
@@ -265,10 +273,15 @@ export default function Stock() {
     return true;
   });
 
-  const movimientosPaginados = movimientosFiltrados.slice(
-    (paginaMovimientos - 1) * POR_PAGINA,
-    paginaMovimientos * POR_PAGINA,
-  );
+  const tablaMov = useTabla(movimientosFiltrados, {
+    porPagina: 20,
+    ordenInicial: { campo: "fecha", dir: "desc" },
+    accessors: {
+      producto: (m) =>
+        productos.find((p) => p.id === m.producto_id)?.nombre || "",
+      fecha: (m) => (m.fecha ? new Date(m.fecha).getTime() : null),
+    },
+  });
 
   return (
     <div className="space-y-6">
@@ -353,30 +366,24 @@ export default function Stock() {
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                        Producto
-                      </th>
+                      <ThOrdenable campo="nombre" tabla={tablaProductos} className="px-6 py-3">Producto</ThOrdenable>
                       <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                         Variante
                       </th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                        Stock Actual
-                      </th>
+                      <ThOrdenable campo="stock" tabla={tablaProductos} className="px-6 py-3">Stock Actual</ThOrdenable>
                       <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                         Stock Mínimo
                       </th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                        Estado
-                      </th>
+                      <ThOrdenable campo="estado" tabla={tablaProductos} className="px-6 py-3">Estado</ThOrdenable>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {filteredProductos.map((producto) =>
+                    {tablaProductos.filas.map((producto) =>
                       producto.tiene_variantes ? (
                         producto.variantes.map((v, i) => (
                           <tr
                             key={`${producto.id}-${i}`}
-                            className={`hover:bg-gray-50 transition ${i === 0 ? "border-t-2 border-gray-200" : ""}`}
+                            className={`hover:bg-gray-50 transition-[background-color] ${i === 0 ? "border-t-2 border-gray-200" : ""}`}
                           >
                             {i === 0 && (
                               <td
@@ -461,16 +468,16 @@ export default function Stock() {
                   </tbody>
                 </table>
                 <Paginacion
-                  total={filteredProductos.length}
-                  porPagina={POR_PAGINA}
-                  paginaActual={paginaActual}
-                  onChange={setPaginaActual}
+                  total={tablaProductos.total}
+                  porPagina={tablaProductos.porPagina}
+                  paginaActual={tablaProductos.pagina}
+                  onChange={tablaProductos.setPagina}
                 />
               </div>
 
               {/* Mobile */}
               <div className="md:hidden space-y-3">
-                {filteredProductos.map((producto) => (
+                {tablaProductos.filas.map((producto) => (
                   <div
                     key={producto.id}
                     className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
@@ -548,10 +555,10 @@ export default function Stock() {
                   </div>
                 ))}
                 <Paginacion
-                  total={filteredProductos.length}
-                  porPagina={POR_PAGINA}
-                  paginaActual={paginaActual}
-                  onChange={setPaginaActual}
+                  total={tablaProductos.total}
+                  porPagina={tablaProductos.porPagina}
+                  paginaActual={tablaProductos.pagina}
+                  onChange={tablaProductos.setPagina}
                 />
               </div>
             </>
@@ -642,25 +649,15 @@ export default function Stock() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Tipo
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Producto
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Cantidad
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Motivo
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Fecha
-                  </th>
+                  <ThOrdenable campo="tipo" tabla={tablaMov} className="px-6 py-3">Tipo</ThOrdenable>
+                  <ThOrdenable campo="producto" tabla={tablaMov} className="px-6 py-3">Producto</ThOrdenable>
+                  <ThOrdenable campo="cantidad" tabla={tablaMov} className="px-6 py-3">Cantidad</ThOrdenable>
+                  <ThOrdenable campo="motivo" tabla={tablaMov} className="px-6 py-3">Motivo</ThOrdenable>
+                  <ThOrdenable campo="fecha" tabla={tablaMov} className="px-6 py-3">Fecha</ThOrdenable>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {movimientosPaginados.map((m, i) => {
+                {tablaMov.filas.map((m, i) => {
                   const producto = productos.find(
                     (p) => p.id === m.producto_id,
                   );
@@ -744,7 +741,7 @@ export default function Stock() {
                 No hay movimientos registrados
               </div>
             ) : (
-              movimientosPaginados.map((m, i) => {
+              tablaMov.filas.map((m, i) => {
                 const producto = productos.find((p) => p.id === m.producto_id);
                 const motivoLabel =
                   {
@@ -808,10 +805,10 @@ export default function Stock() {
           </div>
 
           <Paginacion
-            total={movimientosFiltrados.length}
-            porPagina={POR_PAGINA}
-            paginaActual={paginaMovimientos}
-            onChange={setPaginaMovimientos}
+            total={tablaMov.total}
+            porPagina={tablaMov.porPagina}
+            paginaActual={tablaMov.pagina}
+            onChange={tablaMov.setPagina}
           />
         </>
       )}

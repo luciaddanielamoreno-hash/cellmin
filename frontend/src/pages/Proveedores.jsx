@@ -12,6 +12,9 @@ import {
 } from "lucide-react";
 import { proveedoresService } from "../services/proveedores.service";
 import toast from "react-hot-toast";
+import Paginacion from "../components/ui/Paginacion";
+import ThOrdenable from "../components/ui/ThOrdenable";
+import { useTabla } from "../hooks/useTabla";
 
 function ProveedorModal({ proveedor, onClose, onSave }) {
   const [form, setForm] = useState({
@@ -191,6 +194,15 @@ export default function Proveedores() {
       .includes(search.toLowerCase()),
   );
 
+
+  const tabla = useTabla(filtered, {
+    porPagina: 20,
+    ordenInicial: { campo: "nombre", dir: "asc" },
+    accessors: {
+
+    },
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -240,28 +252,20 @@ export default function Proveedores() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Proveedor
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    CUIT
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Contacto
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
-                    Teléfono
-                  </th>
+                  <ThOrdenable campo="nombre" tabla={tabla} className="px-6 py-3">Proveedor</ThOrdenable>
+                  <ThOrdenable campo="cuit" tabla={tabla} className="px-6 py-3">CUIT</ThOrdenable>
+                  <ThOrdenable campo="contacto" tabla={tabla} className="px-6 py-3">Contacto</ThOrdenable>
+                  <ThOrdenable campo="telefono" tabla={tabla} className="px-6 py-3">Teléfono</ThOrdenable>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                     Acciones
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filtered.map((proveedor) => (
+                {tabla.filas.map((proveedor) => (
                   <tr
                     key={proveedor.id}
-                    className="hover:bg-gray-50 transition"
+                    className="hover:bg-gray-50 transition-[background-color]"
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -331,7 +335,7 @@ export default function Proveedores() {
 
           {/* Mobile */}
           <div className="md:hidden space-y-3">
-            {filtered.map((proveedor) => (
+            {tabla.filas.map((proveedor) => (
               <div
                 key={proveedor.id}
                 className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100"
@@ -404,6 +408,13 @@ export default function Proveedores() {
               </div>
             ))}
           </div>
+
+          <Paginacion
+            total={tabla.total}
+            porPagina={tabla.porPagina}
+            paginaActual={tabla.pagina}
+            onChange={tabla.setPagina}
+          />
         </>
       )}
 

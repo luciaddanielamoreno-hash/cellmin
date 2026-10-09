@@ -28,10 +28,11 @@ import {
 } from "../utils/helpers";
 import { cajaService } from "../services/caja.service";
 import { useAuth } from "../context/AuthContext";
-import OrdenReparacion from "../components/ui/OrdenReparacion";
+import OrdenReparacion, { imprimirOrden } from "../components/ui/OrdenReparacion";
 import DetalleReparacion from "../components/ui/DetalleReparacion";
 import MenuAcciones from "../components/ui/MenuAcciones";
 import Paginacion from "../components/ui/Paginacion";
+import PatronBloqueo from "../components/ui/PatronBloqueo";
 import ThOrdenable from "../components/ui/ThOrdenable";
 import { useTabla } from "../hooks/useTabla";
 
@@ -277,20 +278,29 @@ function SelectorTipos({ tiposDisponibles, tiposSeleccionados, onToggle }) {
   );
 }
 
-function NuevaReparacionModal({ onClose, onSave }) {
+function NuevaReparacionModal({ onClose, onSave, cajaAbierta, userRol }) {
   const [clientes, setClientes] = useState([]);
   const [tiposDisponibles, setTiposDisponibles] = useState([]);
   const [showNuevoCliente, setShowNuevoCliente] = useState(false);
   const [tiposSeleccionados, setTiposSeleccionados] = useState([]);
   const [form, setForm] = useState({
     cliente_id: "",
-    equipo: { marca: "", modelo: "", imei: "", problema_descripcion: "" },
+    equipo: {
+      marca: "",
+      modelo: "",
+      imei: "",
+      problema_descripcion: "",
+      bloqueo_tipo: "ninguno",
+      bloqueo_valor: "",
+    },
     notas_internas: "",
     garantia_dias: 90,
     sucursal: "sucursal_1",
     estado: "en_diagnostico",
   });
   const [loading, setLoading] = useState(false);
+  const [cobrarSena, setCobrarSena] = useState(false);
+  const [sena, setSena] = useState({ monto: "", metodo: "efectivo" });
 
   useEffect(() => {
     Promise.all([
@@ -326,23 +336,64 @@ function NuevaReparacionModal({ onClose, onSave }) {
   const estadoFinal =
     tiposSeleccionados.length > 0 ? "ingresada" : "en_diagnostico";
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // La seña solo se puede cobrar cuando ya hay reparaciones definidas (precio conocido)
+  const senaDisponible =
+    tiposSeleccionados.length > 0 && userRol !== "tecnico" && cajaAbierta;
+  const senaActiva = cobrarSena && senaDisponible;
+  const montoSena = parseFloat(sena.monto) || 0;
+  const saldoRestante = precioTotal - montoSena;
+
+  const handleSubmit = async (e, imprimir = false) => {
+    e?.preventDefault();
     if (!form.cliente_id) {
       toast.error("Seleccioná un cliente");
       return;
     }
+    const { bloqueo_tipo, bloqueo_valor } = form.equipo;
+    if (bloqueo_tipo === "patron" && bloqueo_valor.split("-").length < 4) {
+      toast.error("El patrón debe unir al menos 4 puntos");
+      return;
+    }
+    if (bloqueo_tipo === "pin" && !/^\d{4,16}$/.test(bloqueo_valor)) {
+      toast.error("El PIN debe tener entre 4 y 16 números");
+      return;
+    }
+    if (bloqueo_tipo === "password" && !bloqueo_valor.trim()) {
+      toast.error("Ingresá la contraseña del equipo");
+      return;
+    }
+    if (senaActiva) {
+      if (montoSena <= 0) {
+        toast.error("Ingresá el monto de la seña");
+        return;
+      }
+      if (montoSena > precioTotal) {
+        toast.error("La seña no puede superar el total");
+        return;
+      }
+    }
     setLoading(true);
     try {
-      await reparacionesService.create({
+      const creada = await reparacionesService.create({
         ...form,
         tipos_reparacion: tiposSeleccionados,
         estado: estadoFinal,
+        ...(senaActiva ? { sena: { monto: montoSena, metodo: sena.metodo } } : {}),
       });
-      toast.success("Orden creada correctamente");
+      toast.success(
+        senaActiva
+          ? "Orden creada y seña registrada en caja"
+          : "Orden creada correctamente",
+      );
       onSave();
+      if (imprimir && creada) {
+        imprimirOrden(
+          creada,
+          clientes.find((c) => c.id === form.cliente_id),
+        );
+      }
     } catch (error) {
-      toast.error("Error al crear la orden");
+      toast.error(error.response?.data?.detail || "Error al crear la orden");
     } finally {
       setLoading(false);
     }
@@ -351,8 +402,8 @@ function NuevaReparacionModal({ onClose, onSave }) {
   return (
     <>
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto">
-          <div className="p-6 border-b border-gray-100 sticky top-0 bg-white flex items-center justify-between">
+        <div className="bg-white rounded-2xl w-full max-w-6xl shadow-xl h-[90vh] flex flex-col overflow-hidden">
+          <div className="shrink-0 p-6 border-b border-gray-100 bg-white flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-800">
               Nueva Orden de Reparación
             </h2>
@@ -363,7 +414,12 @@ function NuevaReparacionModal({ onClose, onSave }) {
               <X size={18} />
             </button>
           </div>
-          <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <form
+            onSubmit={handleSubmit}
+            className="flex-1 min-h-0 flex flex-col"
+          >
+            <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden lg:grid lg:grid-cols-2">
+              <div className="min-h-0 p-6 space-y-5 lg:overflow-y-auto lg:border-r border-gray-100">
             {/* Cliente */}
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -492,8 +548,94 @@ function NuevaReparacionModal({ onClose, onSave }) {
                   className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 />
               </div>
+
+              {/* Bloqueo de pantalla */}
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">
+                  Bloqueo de pantalla
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+                <select
+                  value={form.equipo.bloqueo_tipo}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      equipo: {
+                        ...form.equipo,
+                        bloqueo_tipo: e.target.value,
+                        bloqueo_valor: "",
+                      },
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="ninguno">Sin bloqueo</option>
+                  <option value="patron">Patrón</option>
+                  <option value="password">Contraseña</option>
+                  <option value="pin">PIN</option>
+                </select>
+
+                {form.equipo.bloqueo_tipo === "patron" && (
+                  <div>
+                    <PatronBloqueo
+                      value={form.equipo.bloqueo_valor}
+                      onChange={(v) =>
+                        setForm({
+                          ...form,
+                          equipo: { ...form.equipo, bloqueo_valor: v },
+                        })
+                      }
+                    />
+                  </div>
+                )}
+                {form.equipo.bloqueo_tipo === "pin" && (
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={16}
+                    value={form.equipo.bloqueo_valor}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        equipo: {
+                          ...form.equipo,
+                          bloqueo_valor: e.target.value.replace(/\D/g, ""),
+                        },
+                      })
+                    }
+                    placeholder="PIN del equipo"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                )}
+                {form.equipo.bloqueo_tipo === "password" && (
+                  <input
+                    type="text"
+                    maxLength={64}
+                    value={form.equipo.bloqueo_valor}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        equipo: {
+                          ...form.equipo,
+                          bloqueo_valor: e.target.value,
+                        },
+                      })
+                    }
+                    placeholder="Contraseña del equipo"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                )}
+                {form.equipo.bloqueo_tipo !== "ninguno" && (
+                  <p className="text-xs text-gray-400 sm:col-span-2">
+                    Se imprime solo en la copia del técnico.
+                  </p>
+                )}
+                </div>
+              </div>
             </div>
 
+              </div>
+              <div className="min-h-0 p-6 space-y-5 lg:overflow-y-auto">
             {/* Tipos de reparación */}
             <div>
               <p className="text-sm font-medium text-gray-700 mb-2">
@@ -525,6 +667,118 @@ function NuevaReparacionModal({ onClose, onSave }) {
               </span>
             </div>
 
+            {/* Seña */}
+            {userRol !== "tecnico" && (
+              <div className="rounded-xl border border-gray-200 p-4 space-y-3">
+                <label
+                  className={`flex items-center gap-2 ${senaDisponible ? "cursor-pointer" : "cursor-not-allowed"}`}
+                >
+                  <input
+                    type="checkbox"
+                    disabled={!senaDisponible}
+                    checked={senaActiva}
+                    onChange={(e) => setCobrarSena(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <span
+                    className={`text-sm font-medium ${senaDisponible ? "text-gray-700" : "text-gray-400"}`}
+                  >
+                    Cobrar seña ahora
+                  </span>
+                </label>
+                {tiposSeleccionados.length === 0 && (
+                  <p className="text-xs text-gray-400">
+                    Disponible cuando elegís las reparaciones. En diagnóstico no
+                    se cobra seña.
+                  </p>
+                )}
+                {tiposSeleccionados.length > 0 && !cajaAbierta && (
+                  <p className="text-xs text-orange-600">
+                    Abrí la caja para poder cobrar una seña.
+                  </p>
+                )}
+                {senaActiva && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">
+                          Monto de la seña
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max={precioTotal}
+                          value={sena.monto}
+                          onChange={(e) =>
+                            setSena({ ...sena, monto: e.target.value })
+                          }
+                          placeholder="0"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">
+                          Medio de pago
+                        </label>
+                        <select
+                          value={sena.metodo}
+                          onChange={(e) =>
+                            setSena({ ...sena, metodo: e.target.value })
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          {METODOS_PAGO.map((m) => (
+                            <option key={m.value} value={m.value}>
+                              {m.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSena({ ...sena, monto: String(precioTotal) })
+                      }
+                      className="text-xs text-blue-600 hover:underline"
+                    >
+                      Cobrar el total
+                    </button>
+                    <div className="bg-gray-50 rounded-xl p-3 space-y-1 text-sm">
+                      <div className="flex justify-between text-gray-600">
+                        <span>Total de la reparación</span>
+                        <span>{formatCurrency(precioTotal)}</span>
+                      </div>
+                      <div className="flex justify-between text-green-600">
+                        <span>Seña</span>
+                        <span>- {formatCurrency(montoSena)}</span>
+                      </div>
+                      <div
+                        className={`flex justify-between font-bold border-t border-gray-200 pt-1 ${
+                          saldoRestante < 0
+                            ? "text-red-600"
+                            : saldoRestante === 0
+                              ? "text-green-600"
+                              : "text-gray-800"
+                        }`}
+                      >
+                        <span>
+                          {saldoRestante < 0
+                            ? "La seña supera el total"
+                            : saldoRestante === 0
+                              ? "Pagada completa"
+                              : "Saldo restante"}
+                        </span>
+                        <span>
+                          {saldoRestante < 0 ? "" : formatCurrency(saldoRestante)}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             {/* Notas */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -540,20 +794,31 @@ function NuevaReparacionModal({ onClose, onSave }) {
               />
             </div>
 
-            <div className="flex gap-3 pt-2">
+              </div>
+            </div>
+            <div className="shrink-0 border-t border-gray-100 px-6 py-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-xl text-sm hover:bg-gray-50 transition"
+                className="sm:w-44 py-2 border border-gray-300 text-gray-700 rounded-xl text-sm hover:bg-gray-50 transition"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 py-2 bg-blue-600 text-white rounded-xl text-sm hover:bg-blue-700 disabled:bg-blue-400 transition"
+                className="sm:w-44 py-2 bg-blue-600 text-white rounded-xl text-sm hover:bg-blue-700 disabled:bg-blue-400 transition"
               >
-                {loading ? "Creando..." : "Crear Orden"}
+                {loading ? "Creando..." : "Crear"}
+              </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => handleSubmit(null, true)}
+                className="sm:w-44 py-2 bg-gray-800 text-white rounded-xl text-sm hover:bg-gray-900 disabled:bg-gray-500 transition inline-flex items-center justify-center gap-1.5"
+              >
+                <Printer size={15} />
+                Crear e imprimir
               </button>
             </div>
           </form>
@@ -958,7 +1223,7 @@ function FilaReparacion({
 
   return (
     <>
-      <tr className="hover:bg-gray-50 transition">
+      <tr className="hover:bg-gray-50 transition-[background-color]">
         <td className="px-6 py-4">
           <button
             onClick={() => onVerDetalle(reparacion)}
@@ -1010,7 +1275,13 @@ function FilaReparacion({
           )}
         </td>
         <td className="px-6 py-4 text-sm">
-          {reparacion.saldo_pendiente > 0 ? (
+          {reparacion.estado === "cancelada" ? (
+            <span className="text-gray-400 text-xs">
+              {reparacion.total_devuelto > 0
+                ? `Devuelto ${formatCurrency(reparacion.total_devuelto)}`
+                : "-"}
+            </span>
+          ) : reparacion.saldo_pendiente > 0 ? (
             <span className="text-red-600 font-medium">
               {formatCurrency(reparacion.saldo_pendiente)}
             </span>
@@ -1588,7 +1859,7 @@ function GestionTiposReparacion() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {filtered.map((tipo) => (
-                  <tr key={tipo.id} className="hover:bg-gray-50 transition">
+                  <tr key={tipo.id} className="hover:bg-gray-50 transition-[background-color]">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center shrink-0">
@@ -1823,10 +2094,20 @@ export default function Reparaciones() {
   const filtrosActivos = Object.values(filtros).some((v) => v !== "");
 
   const handleCancelar = async (id) => {
-    if (!confirm("¿Cancelar esta orden de reparación?")) return;
+    const r = reparaciones.find((x) => x.id === id);
+    const pagado = r?.total_pagado || 0;
+    const mensaje =
+      pagado > 0
+        ? `¿Cancelar esta orden? Se devolverán ${formatCurrency(pagado)} al cliente y se registrará como egreso en la caja, con el mismo medio de pago de cada cobro.`
+        : "¿Cancelar esta orden de reparación?";
+    if (!confirm(mensaje)) return;
     try {
-      await reparacionesService.cancelar(id);
-      toast.success("Reparación cancelada");
+      const res = await reparacionesService.cancelar(id);
+      toast.success(
+        res.total_devuelto > 0
+          ? `Reparación cancelada. Devolución de ${formatCurrency(res.total_devuelto)} registrada en caja`
+          : "Reparación cancelada",
+      );
       fetchData();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Error al cancelar");
@@ -2051,6 +2332,8 @@ export default function Reparaciones() {
 
           {showModal && (
             <NuevaReparacionModal
+              cajaAbierta={cajaAbierta}
+              userRol={user?.rol}
               onClose={() => setShowModal(false)}
               onSave={() => {
                 setShowModal(false);

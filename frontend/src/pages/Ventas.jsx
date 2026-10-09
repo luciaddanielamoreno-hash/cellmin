@@ -805,7 +805,7 @@ function FilaVenta({ venta, clientes, onCancel, onImprimir, onVerDetalle }) {
   return (
     <>
       {/* Desktop */}
-      <tr className="hidden md:table-row hover:bg-gray-50 transition">
+      <tr className="hidden md:table-row hover:bg-gray-50 transition-[background-color]">
         <td className="px-6 py-4 text-center">
           <button
             onClick={() => onVerDetalle(venta)}

@@ -675,7 +675,7 @@ export default function Stock() {
                       cancelacion_compra: "Cancelación de compra",
                     }[m.motivo] || m.motivo;
                   return (
-                    <tr key={i} className="hover:bg-gray-50 transition">
+                    <tr key={i} className="hover:bg-gray-50 transition-[background-color]">
                       <td className="px-6 py-4">
                         <span
                           className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${

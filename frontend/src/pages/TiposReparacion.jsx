@@ -196,7 +196,7 @@ export default function TiposReparacion() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {tipos.map((tipo) => (
-                  <tr key={tipo.id} className="hover:bg-gray-50 transition">
+                  <tr key={tipo.id} className="hover:bg-gray-50 transition-[background-color]">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center shrink-0">

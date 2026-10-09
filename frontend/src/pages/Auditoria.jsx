@@ -256,7 +256,7 @@ export default function Auditoria() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {filtered.map((log, i) => (
-                  <tr key={i} className="hover:bg-gray-50 transition">
+                  <tr key={i} className="hover:bg-gray-50 transition-[background-color]">
                     <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
                       {formatDateTime(log.fecha)}
                     </td>

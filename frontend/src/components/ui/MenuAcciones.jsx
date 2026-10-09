@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { MoreVertical } from "lucide-react";
 
 // Menú de tres puntitos. Se posiciona con "fixed" para que no lo recorte
@@ -35,16 +36,22 @@ export default function MenuAcciones({ acciones }) {
     };
   }, [abierto]);
 
+  // Se mide el menú real antes de pintarlo, así nunca aparece en una
+  // posición provisoria ni estira la página.
+  useLayoutEffect(() => {
+    if (!abierto || !botonRef.current || !menuRef.current) return;
+    const r = botonRef.current.getBoundingClientRect();
+    const alto = menuRef.current.offsetHeight;
+    const abajoLibre = window.innerHeight - r.bottom - 8;
+    setPos({
+      top: abajoLibre < alto ? Math.max(8, r.top - alto - 4) : r.bottom + 4,
+      right: Math.max(8, window.innerWidth - r.right),
+      listo: true,
+    });
+  }, [abierto]);
+
   const toggle = () => {
-    if (!abierto && botonRef.current) {
-      const r = botonRef.current.getBoundingClientRect();
-      const alto = visibles.length * 40 + 16;
-      const abajoLibre = window.innerHeight - r.bottom;
-      setPos({
-        top: abajoLibre < alto ? Math.max(8, r.top - alto) : r.bottom + 4,
-        right: window.innerWidth - r.right,
-      });
-    }
+    setPos({ top: 0, right: 0, listo: false });
     setAbierto(!abierto);
   };
 
@@ -60,11 +67,17 @@ export default function MenuAcciones({ acciones }) {
       >
         <MoreVertical size={16} />
       </button>
-      {abierto && (
+      {abierto &&
+        createPortal(
         <div
           ref={menuRef}
-          style={{ position: "fixed", top: pos.top, right: pos.right }}
-          className="z-50 min-w-[210px] bg-white border border-gray-200 rounded-xl shadow-lg py-1"
+          style={{
+            position: "fixed",
+            top: pos.top,
+            right: pos.right,
+            visibility: pos.listo ? "visible" : "hidden",
+          }}
+          className="z-50 overflow-hidden min-w-[210px] bg-white border border-gray-200 rounded-xl shadow-lg py-1"
         >
           {visibles.map((a, i) => (
             <button
@@ -83,8 +96,9 @@ export default function MenuAcciones({ acciones }) {
               {a.label}
             </button>
           ))}
-        </div>
-      )}
+        </div>,
+          document.body,
+        )}
     </>
   );
 }

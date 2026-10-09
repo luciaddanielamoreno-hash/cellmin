@@ -297,7 +297,7 @@ export default function Clientes() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {filtered.map((cliente) => (
-                  <tr key={cliente.id} className="hover:bg-gray-50 transition">
+                  <tr key={cliente.id} className="hover:bg-gray-50 transition-[background-color]">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">

@@ -22,6 +22,29 @@ import {
   parsearMoneda,
 } from "../utils/helpers";
 
+// Separa los movimientos de la caja por origen, para no mezclar las
+// cancelaciones de ventas con los movimientos hechos a mano
+const CONCEPTOS_MOV = {
+  manual: "Movimientos manuales",
+  cobro_reparacion: "Cobros de reparaciones",
+  cancelacion_venta: "Ventas canceladas (devoluciones)",
+  devolucion_reparacion: "Devoluciones de reparaciones",
+};
+const grupoMovimiento = (m) => {
+  if (m.concepto === "cancelacion_venta") return "cancelacion_venta";
+  if (m.concepto === "devolucion_reparacion") return "devolucion_reparacion";
+  if (m.concepto === "reparacion") return "cobro_reparacion";
+  return "manual";
+};
+const totalesMovimientos = (movs = []) => {
+  const t = {};
+  movs.forEach((m) => {
+    const g = grupoMovimiento(m);
+    t[g] = (t[g] || 0) + (m.tipo === "ingreso" ? m.monto : -m.monto);
+  });
+  return t;
+};
+
 function AbrirCajaModal({ onClose, onSave }) {
   const { user } = useAuth();
   const [monto, setMonto] = useState("");
@@ -364,17 +387,19 @@ function CerrarCajaModal({ caja, onClose, onSave }) {
                 + {formatCurrency(caja.total_ventas_hoy || 0)}
               </span>
             </div>
-            {totalMovimientos !== 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Movimientos manuales</span>
-                <span
-                  className={`font-medium ${totalMovimientos >= 0 ? "text-green-600" : "text-red-600"}`}
-                >
-                  {totalMovimientos >= 0 ? "+" : ""}
-                  {formatCurrency(totalMovimientos)}
-                </span>
-              </div>
-            )}
+            {Object.entries(totalesMovimientos(caja.movimientos))
+              .filter(([, v]) => Math.abs(v) > 0.001)
+              .map(([g, v]) => (
+                <div key={g} className="flex justify-between text-sm">
+                  <span className="text-gray-600">{CONCEPTOS_MOV[g]}</span>
+                  <span
+                    className={`font-medium ${v >= 0 ? "text-green-600" : "text-red-600"}`}
+                  >
+                    {v >= 0 ? "+" : ""}
+                    {formatCurrency(v)}
+                  </span>
+                </div>
+              ))}
             <div className="flex justify-between text-sm font-semibold border-t border-gray-200 pt-2">
               <span className="text-gray-700">Total esperado</span>
               <span>{formatCurrency(montoEsperadoTotal)}</span>
@@ -1403,6 +1428,11 @@ export default function Caja() {
                                   </span>
                                 </td>
                                 <td className="px-3 py-2 text-gray-600">
+                                  {grupoMovimiento(m) !== "manual" && (
+                                    <span className="text-xs font-medium text-gray-500 mr-1">
+                                      [{CONCEPTOS_MOV[grupoMovimiento(m)]}]
+                                    </span>
+                                  )}
                                   {m.motivo}
                                 </td>
                                 <td

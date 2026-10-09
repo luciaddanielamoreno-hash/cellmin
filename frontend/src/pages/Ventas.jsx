@@ -11,6 +11,8 @@ import {
   ExternalLink,
   Printer,
   Trash2,
+  Eye,
+  Ban,
   Minus,
 } from "lucide-react";
 import { ventasService } from "../services/ventas.service";
@@ -18,6 +20,7 @@ import { productosService } from "../services/productos.service";
 import { clientesService } from "../services/clientes.service";
 import toast from "react-hot-toast";
 import PrecioUSD from "../components/ui/PrecioUSD";
+import MenuAcciones from "../components/ui/MenuAcciones";
 import {
   formatCurrency,
   formatDateTime,
@@ -800,6 +803,40 @@ function BadgePago({ metodoPago }) {
   );
 }
 
+// Acciones del menú de tres puntitos de cada venta
+function construirAcciones({
+  venta,
+  puedeCancelar,
+  onCancel,
+  onImprimir,
+  onVerDetalle,
+}) {
+  return [
+    {
+      label: "Ver detalle",
+      icono: <Eye size={15} />,
+      onClick: () => onVerDetalle(venta),
+    },
+    {
+      label: "Abrir en pestaña nueva",
+      icono: <ExternalLink size={15} />,
+      onClick: () => window.open(`/ventas/${venta._id}`, "_blank", "noopener"),
+    },
+    {
+      label: "Imprimir ticket",
+      icono: <Printer size={15} />,
+      onClick: () => onImprimir(venta),
+    },
+    venta.estado === "completada" &&
+      puedeCancelar && {
+        label: "Cancelar venta",
+        icono: <Ban size={15} />,
+        peligro: true,
+        onClick: () => onCancel(venta._id, venta.numero_venta),
+      },
+  ];
+}
+
 function FilaVenta({
   venta,
   clientes,
@@ -857,29 +894,21 @@ function FilaVenta({
         </td>
         <td className="px-6 py-4 text-center">
           <div className="flex items-center justify-center gap-2">
-            {venta.estado === "completada" && puedeCancelar && (
-              <button
-                onClick={() => onCancel(venta._id, venta.numero_venta)}
-                className="px-3 py-1 text-xs text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition"
-              >
-                Cancelar
-              </button>
-            )}
-            <a
-              href={`/ventas/${venta._id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Ver detalle en pestaña nueva"
-              className="p-1 text-gray-400 hover:text-blue-600"
-            >
-              <ExternalLink size={16} />
-            </a>
             <button
               onClick={() => setExpandido(!expandido)}
               className="p-1 text-gray-400 hover:text-gray-600"
             >
               {expandido ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
+            <MenuAcciones
+              acciones={construirAcciones({
+                venta,
+                puedeCancelar,
+                onCancel,
+                onImprimir,
+                onVerDetalle,
+              })}
+            />
           </div>
         </td>
       </tr>
@@ -1014,29 +1043,21 @@ function CardVentaMobile({
             {formatCurrency(venta.total)}
           </span>
           <div className="flex items-center gap-2">
-            {venta.estado === "completada" && puedeCancelar && (
-              <button
-                onClick={() => onCancel(venta._id, venta.numero_venta)}
-                className="px-3 py-1 text-xs text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition"
-              >
-                Cancelar
-              </button>
-            )}
-            <a
-              href={`/ventas/${venta._id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Ver detalle en pestaña nueva"
-              className="p-1 text-gray-400 hover:text-blue-600"
-            >
-              <ExternalLink size={16} />
-            </a>
             <button
               onClick={() => setExpandido(!expandido)}
               className="p-1 text-gray-400 hover:text-gray-600"
             >
               {expandido ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
+            <MenuAcciones
+              acciones={construirAcciones({
+                venta,
+                puedeCancelar,
+                onCancel,
+                onImprimir,
+                onVerDetalle,
+              })}
+            />
           </div>
         </div>
       </div>

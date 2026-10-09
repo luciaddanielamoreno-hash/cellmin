@@ -17,6 +17,7 @@ import { ventasService } from "../services/ventas.service";
 import { productosService } from "../services/productos.service";
 import { clientesService } from "../services/clientes.service";
 import toast from "react-hot-toast";
+import PrecioUSD from "../components/ui/PrecioUSD";
 import {
   formatCurrency,
   formatDateTime,
@@ -83,6 +84,7 @@ function FilaAgregable({ nombre, precio, stock, minimo, enCarrito, onAdd }) {
           >
             {formatCurrency(precio)}
           </span>
+          <PrecioUSD pesos={precio} />
           <ChipStock stock={stock} minimo={minimo} />
         </div>
       </div>
@@ -729,6 +731,7 @@ function NuevaVentaModal({ onClose, onSave }) {
               <p className="text-xl font-bold text-gray-800">
                 {formatCurrency(total)}
               </p>
+              <PrecioUSD pesos={total} />
             </div>
             <div>
               {vuelto !== null && vuelto >= 0 && (
@@ -797,7 +800,14 @@ function BadgePago({ metodoPago }) {
   );
 }
 
-function FilaVenta({ venta, clientes, onCancel, onImprimir, onVerDetalle }) {
+function FilaVenta({
+  venta,
+  clientes,
+  puedeCancelar,
+  onCancel,
+  onImprimir,
+  onVerDetalle,
+}) {
   const [expandido, setExpandido] = useState(false);
   const cliente = clientes.find((c) => c.id === venta.cliente_id);
   const pago = parsearMetodoPago(venta.metodo_pago);
@@ -847,7 +857,7 @@ function FilaVenta({ venta, clientes, onCancel, onImprimir, onVerDetalle }) {
         </td>
         <td className="px-6 py-4 text-center">
           <div className="flex items-center justify-center gap-2">
-            {venta.estado === "completada" && (
+            {venta.estado === "completada" && puedeCancelar && (
               <button
                 onClick={() => onCancel(venta._id, venta.numero_venta)}
                 className="px-3 py-1 text-xs text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition"
@@ -956,6 +966,7 @@ function FilaVenta({ venta, clientes, onCancel, onImprimir, onVerDetalle }) {
 function CardVentaMobile({
   venta,
   clientes,
+  puedeCancelar,
   onCancel,
   onImprimir,
   onVerDetalle,
@@ -1003,7 +1014,7 @@ function CardVentaMobile({
             {formatCurrency(venta.total)}
           </span>
           <div className="flex items-center gap-2">
-            {venta.estado === "completada" && (
+            {venta.estado === "completada" && puedeCancelar && (
               <button
                 onClick={() => onCancel(venta._id, venta.numero_venta)}
                 className="px-3 py-1 text-xs text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition"
@@ -1161,6 +1172,7 @@ export default function Ventas() {
   const [showModal, setShowModal] = useState(false);
   const [showFiltros, setShowFiltros] = useState(false);
   const [cajaAbierta, setCajaAbierta] = useState(false);
+  const [cajaActual, setCajaActual] = useState(null);
   const [showTicket, setShowTicket] = useState(false);
   const [ventaImprimir, setVentaImprimir] = useState(null);
   const [ventaDetalle, setVentaDetalle] = useState(null);
@@ -1181,7 +1193,7 @@ export default function Ventas() {
 
   const fetchData = async () => {
     try {
-      const [vs, cs, ps, cajaActual] = await Promise.all([
+      const [vs, cs, ps, cajaHoy] = await Promise.all([
         ventasService.getAll(),
         clientesService.getAll(),
         productosService.getAll(),
@@ -1190,7 +1202,8 @@ export default function Ventas() {
       setVentas(vs);
       setClientes(cs);
       setProductos(ps);
-      setCajaAbierta(cajaActual?.estado === "abierta");
+      setCajaAbierta(cajaHoy?.estado === "abierta");
+      setCajaActual(cajaHoy);
     } catch (error) {
       toast.error("Error al cargar ventas");
     } finally {
@@ -1208,15 +1221,22 @@ export default function Ventas() {
   const handleCancel = async () => {
     try {
       await ventasService.cancel(ventaCancelarId);
-      toast.success("Venta cancelada y stock restaurado");
+      toast.success("Venta cancelada: stock restaurado y dinero devuelto desde la caja");
       setShowConfirmar(false);
       setVentaCancelarId(null);
       setVentaCancelarNumero(null);
       fetchData();
     } catch (error) {
-      toast.error("Error al cancelar la venta");
+      toast.error(error.response?.data?.detail || "Error al cancelar la venta");
     }
   };
+
+  // Solo se pueden cancelar ventas de la caja abierta (las de cajas ya
+  // cerradas quedaron incluidas en un cierre)
+  const puedeCancelar = (v) =>
+    cajaActual?.estado === "abierta" &&
+    v.sucursal === cajaActual.sucursal &&
+    new Date(v.fecha) >= new Date(cajaActual.fecha_apertura);
 
   const limpiarFiltros = () =>
     setFiltros({
@@ -1540,6 +1560,7 @@ export default function Ventas() {
                     key={venta._id}
                     venta={venta}
                     clientes={clientes}
+                    puedeCancelar={puedeCancelar(venta)}
                     onVerDetalle={setVentaDetalle}
                     onCancel={(id, numero) => {
                       setVentaCancelarId(id);
@@ -1563,6 +1584,7 @@ export default function Ventas() {
                 key={venta._id}
                 venta={venta}
                 clientes={clientes}
+                puedeCancelar={puedeCancelar(venta)}
                 onVerDetalle={setVentaDetalle}
                 onCancel={(id, numero) => {
                   setVentaCancelarId(id);
@@ -1644,7 +1666,7 @@ export default function Ventas() {
 
       {showConfirmar && (
         <ModalConfirmar
-          mensaje={`¿Cancelar la venta ${ventaCancelarNumero}? El stock será restaurado.`}
+          mensaje={`¿Cancelar la venta ${ventaCancelarNumero}? Se restaura el stock y se registra la devolución del dinero en la caja abierta.`}
           onConfirmar={handleCancel}
           onCancelar={() => {
             setShowConfirmar(false);

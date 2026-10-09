@@ -32,6 +32,35 @@ function AbrirCajaModal({ onClose, onSave }) {
   const [loading, setLoading] = useState(false);
 
   const [montoDisplay, setMontoDisplay] = useState("");
+  const [esperado, setEsperado] = useState(null); // efectivo que dejó el cierre anterior
+
+  // Al elegir la sucursal se busca lo que quedó en la caja la última vez
+  useEffect(() => {
+    let vigente = true;
+    cajaService
+      .getEsperado(sucursal)
+      .then((d) => {
+        if (!vigente) return;
+        setEsperado(d?.esperado ?? null);
+        // Se propone el monto esperado; se puede corregir si el conteo real es otro
+        if (d?.esperado != null) {
+          setMontoDisplay(
+            new Intl.NumberFormat("es-AR", {
+              maximumFractionDigits: 2,
+            }).format(d.esperado),
+          );
+        } else {
+          setMontoDisplay("");
+        }
+      })
+      .catch(() => vigente && setEsperado(null));
+    return () => {
+      vigente = false;
+    };
+  }, [sucursal]);
+
+  const montoContado = parsearMoneda(montoDisplay) || 0;
+  const difApertura = esperado != null ? montoContado - esperado : 0;
 
   const handleMontoChange = (valor) => {
     // Permitir solo números y coma
@@ -111,7 +140,32 @@ function AbrirCajaModal({ onClose, onSave }) {
                 className="w-full pl-7 pr-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+            {esperado != null && (
+              <p className="text-xs text-gray-500 mt-1">
+                Según el cierre anterior quedaron{" "}
+                <span className="font-medium">{formatCurrency(esperado)}</span>{" "}
+                en caja.
+              </p>
+            )}
           </div>
+          {esperado != null && Math.abs(difApertura) > 0.01 && (
+            <div
+              className={`rounded-xl px-4 py-3 text-sm ${
+                difApertura > 0
+                  ? "bg-blue-50 text-blue-700"
+                  : "bg-red-50 text-red-700"
+              }`}
+            >
+              <p className="font-medium">
+                {difApertura > 0 ? "Sobran" : "Faltan"}{" "}
+                {formatCurrency(Math.abs(difApertura))} respecto de lo esperado
+              </p>
+              <p className="text-xs opacity-80">
+                La diferencia queda registrada en los detalles de esta caja.
+                Si querés, aclará el motivo en las notas.
+              </p>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Notas
@@ -158,6 +212,7 @@ function CerrarCajaModal({ caja, onClose, onSave }) {
   );
   const [notas, setNotas] = useState("");
   const [loading, setLoading] = useState(false);
+  const [dejar, setDejar] = useState({ monto: 0, display: "" });
 
   const totalMovimientos = (caja.movimientos || []).reduce(
     (acc, m) => (m.tipo === "ingreso" ? acc + m.monto : acc - m.monto),
@@ -220,6 +275,29 @@ function CerrarCajaModal({ caja, onClose, onSave }) {
   };
 
   const totalReal = montos.reduce((acc, m) => acc + (m.monto || 0), 0);
+  const efectivoContado = montos.find((m) => m.metodo === "efectivo")?.monto || 0;
+  const excedeDejar = dejar.monto > efectivoContado + 0.001;
+
+  const handleDejarChange = (valor) => {
+    const limpio = valor.replace(/[^\d,]/g, "");
+    const partes = limpio.split(",");
+    const entera = partes[0];
+    const decimal = partes.length > 1 ? partes[1].slice(0, 2) : null;
+    const enteraFormateada = entera
+      ? new Intl.NumberFormat("es-AR").format(parseInt(entera) || 0)
+      : "";
+    const display =
+      decimal !== null ? `${enteraFormateada},${decimal}` : enteraFormateada;
+    setDejar({ monto: parsearMoneda(display) || 0, display });
+  };
+
+  const dejarTodo = () =>
+    setDejar({
+      monto: efectivoContado,
+      display: new Intl.NumberFormat("es-AR", {
+        maximumFractionDigits: 2,
+      }).format(efectivoContado),
+    });
 
   const diferenciaPorMetodo = METODOS.map((m) => {
     const montoIngresado = montos.find((mo) => mo.metodo === m.key)?.monto || 0;
@@ -239,6 +317,10 @@ function CerrarCajaModal({ caja, onClose, onSave }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (excedeDejar) {
+      toast.error("No podés dejar en caja más efectivo del que contaste");
+      return;
+    }
     setLoading(true);
     try {
       const result = await cajaService.cerrar({
@@ -246,12 +328,13 @@ function CerrarCajaModal({ caja, onClose, onSave }) {
           metodo: m.metodo,
           monto: m.monto || 0,
         })),
+        dejar_en_caja: dejar.monto || 0,
         notas,
       });
       toast.success("Caja cerrada correctamente");
       onSave(result);
     } catch (error) {
-      toast.error("Error al cerrar la caja");
+      toast.error(error.response?.data?.detail || "Error al cerrar la caja");
     } finally {
       setLoading(false);
     }
@@ -296,6 +379,20 @@ function CerrarCajaModal({ caja, onClose, onSave }) {
               <span className="text-gray-700">Total esperado</span>
               <span>{formatCurrency(montoEsperadoTotal)}</span>
             </div>
+            {caja.monto_esperado_apertura != null &&
+              Math.abs(caja.diferencia_apertura || 0) > 0.01 && (
+                <p
+                  className={`text-xs pt-1 ${
+                    caja.diferencia_apertura > 0 ? "text-blue-600" : "text-red-600"
+                  }`}
+                >
+                  Al abrir esta caja se esperaban{" "}
+                  {formatCurrency(caja.monto_esperado_apertura)} y se contaron{" "}
+                  {formatCurrency(caja.monto_inicial)} (
+                  {caja.diferencia_apertura > 0 ? "sobraban " : "faltaban "}
+                  {formatCurrency(Math.abs(caja.diferencia_apertura))}).
+                </p>
+              )}
           </div>
 
           {/* Ingreso por método */}
@@ -344,6 +441,50 @@ function CerrarCajaModal({ caja, onClose, onSave }) {
                 )}
               </div>
             ))}
+          </div>
+
+          {/* Efectivo que queda en la caja para mañana */}
+          <div className="rounded-xl border border-gray-200 p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-gray-700">
+                Dejar en caja (efectivo)
+              </p>
+              <button
+                type="button"
+                onClick={dejarTodo}
+                disabled={efectivoContado <= 0}
+                className="text-xs text-blue-600 hover:underline disabled:text-gray-300 disabled:no-underline"
+              >
+                Dejar todo el efectivo contado
+              </button>
+            </div>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-medium">
+                $
+              </span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={dejar.display}
+                onChange={(e) => handleDejarChange(e.target.value)}
+                placeholder="0"
+                className={`w-full pl-7 pr-4 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 ${
+                  excedeDejar
+                    ? "border-red-400 focus:ring-red-400"
+                    : "border-gray-300 focus:ring-blue-500"
+                }`}
+              />
+            </div>
+            {excedeDejar ? (
+              <p className="text-xs text-red-600">
+                Es más que el efectivo contado ({formatCurrency(efectivoContado)}).
+              </p>
+            ) : (
+              <p className="text-xs text-gray-500">
+                Se retira {formatCurrency(Math.max(0, efectivoContado - (dejar.monto || 0)))}.
+                Lo que dejes será el monto inicial esperado de la próxima apertura.
+              </p>
+            )}
           </div>
 
           {/* Resumen totales */}
@@ -579,120 +720,6 @@ function MovimientoModal({ onClose, onSave }) {
   );
 }
 function ResumenCierre({ resultado, onClose }) {
-  function ResumenCierre({ resultado, onClose }) {
-    const diferencia = resultado.diferencia || 0;
-    const metodosLabel = {
-      efectivo: "Efectivo",
-      transferencia: "Transferencia",
-      debito: "Débito",
-      credito: "Crédito",
-    };
-
-    return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
-          <div className="p-6 border-b border-gray-100">
-            <h2 className="text-lg font-semibold text-gray-800">
-              Resumen de Cierre
-            </h2>
-          </div>
-          <div className="p-6 space-y-4">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Total ventas del día</span>
-                <span className="font-semibold text-green-600">
-                  {formatCurrency(resultado.total_ventas)}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Monto esperado total</span>
-                <span className="font-semibold">
-                  {formatCurrency(resultado.monto_esperado)}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Monto real contado</span>
-                <span className="font-semibold">
-                  {formatCurrency(resultado.monto_real)}
-                </span>
-              </div>
-              <div
-                className={`flex justify-between font-bold p-3 rounded-xl text-sm ${
-                  diferencia === 0
-                    ? "bg-green-50 text-green-700"
-                    : diferencia > 0
-                      ? "bg-blue-50 text-blue-700"
-                      : "bg-red-50 text-red-700"
-                }`}
-              >
-                <span>Diferencia total</span>
-                <span>
-                  {diferencia >= 0 ? "+" : ""}
-                  {formatCurrency(diferencia)}
-                </span>
-              </div>
-            </div>
-
-            {/* Detalle por método */}
-            {resultado.esperado_por_metodo && (
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">
-                  Detalle por método de pago
-                </p>
-                <div className="space-y-2">
-                  {Object.entries(resultado.esperado_por_metodo).map(
-                    ([metodo, esperado]) => {
-                      const real =
-                        resultado.montos_reales_por_metodo?.[metodo] || 0;
-                      const diff =
-                        resultado.diferencias_por_metodo?.[metodo] || 0;
-                      return (
-                        <div
-                          key={metodo}
-                          className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3"
-                        >
-                          <span className="text-sm font-medium text-gray-700">
-                            {metodosLabel[metodo] || metodo}
-                          </span>
-                          <div className="text-right space-y-0.5">
-                            <p className="text-xs text-gray-500">
-                              Esperado: {formatCurrency(esperado)}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              Real: {formatCurrency(real)}
-                            </p>
-                            <p
-                              className={`text-xs font-bold ${
-                                diff === 0
-                                  ? "text-green-600"
-                                  : diff > 0
-                                    ? "text-blue-600"
-                                    : "text-red-600"
-                              }`}
-                            >
-                              {diff >= 0 ? "+" : ""}
-                              {formatCurrency(diff)}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    },
-                  )}
-                </div>
-              </div>
-            )}
-
-            <button
-              onClick={onClose}
-              className="w-full py-2 bg-gray-800 text-white rounded-xl text-sm hover:bg-gray-900 transition"
-            >
-              Cerrar
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
   const diferencia = resultado.diferencia || 0;
   const metodosLabel = {
     efectivo: "Efectivo",
@@ -703,7 +730,7 @@ function ResumenCierre({ resultado, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b border-gray-100">
           <h2 className="text-lg font-semibold text-gray-800">
             Resumen de Cierre
@@ -718,7 +745,7 @@ function ResumenCierre({ resultado, onClose }) {
               </span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Monto esperado</span>
+              <span className="text-gray-600">Monto esperado total</span>
               <span className="font-semibold">
                 {formatCurrency(resultado.monto_esperado)}
               </span>
@@ -746,48 +773,95 @@ function ResumenCierre({ resultado, onClose }) {
             </div>
           </div>
 
-          {/* Diferencias por método */}
-          {resultado.ventas_por_metodo &&
-            Object.keys(resultado.ventas_por_metodo).length > 0 && (
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">
-                  Detalle por método de pago
+          {/* Efectivo que queda y efectivo que se retira */}
+          {resultado.monto_dejado !== undefined && (
+            <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Efectivo dejado en caja</span>
+                <span className="font-semibold">
+                  {formatCurrency(resultado.monto_dejado || 0)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Efectivo retirado</span>
+                <span className="font-semibold">
+                  {formatCurrency(resultado.monto_retirado || 0)}
+                </span>
+              </div>
+              <p className="text-xs text-gray-400">
+                Lo dejado será el monto inicial esperado de la próxima apertura.
+              </p>
+            </div>
+          )}
+
+          {/* Diferencia que hubo al abrir esta caja */}
+          {resultado.monto_esperado_apertura != null &&
+            Math.abs(resultado.diferencia_apertura || 0) > 0.01 && (
+              <div
+                className={`rounded-xl px-4 py-3 text-sm ${
+                  resultado.diferencia_apertura > 0
+                    ? "bg-blue-50 text-blue-700"
+                    : "bg-red-50 text-red-700"
+                }`}
+              >
+                <p className="font-medium">Diferencia al abrir esta caja</p>
+                <p className="text-xs opacity-80">
+                  Se esperaban {formatCurrency(resultado.monto_esperado_apertura)}{" "}
+                  y se abrió con {formatCurrency(resultado.monto_inicial)}:{" "}
+                  {resultado.diferencia_apertura > 0 ? "sobraron" : "faltaron"}{" "}
+                  {formatCurrency(Math.abs(resultado.diferencia_apertura))}.
                 </p>
-                <div className="space-y-2">
-                  {Object.entries(resultado.ventas_por_metodo).map(
-                    ([metodo, esperado]) => {
-                      const real =
-                        resultado.montos_reales_por_metodo?.[metodo] || 0;
-                      const diff = real - esperado;
-                      return (
-                        <div
-                          key={metodo}
-                          className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3"
-                        >
-                          <span className="text-sm text-gray-700">
-                            {metodosLabel[metodo] || metodo}
-                          </span>
-                          <div className="text-right">
-                            <p className="text-xs text-gray-500">
-                              Esperado: {formatCurrency(esperado)}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              Real: {formatCurrency(real)}
-                            </p>
-                            <p
-                              className={`text-xs font-bold ${diff === 0 ? "text-green-600" : diff > 0 ? "text-blue-600" : "text-red-600"}`}
-                            >
-                              {diff >= 0 ? "+" : ""}
-                              {formatCurrency(diff)}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    },
-                  )}
-                </div>
               </div>
             )}
+
+          {/* Detalle por método */}
+          {resultado.esperado_por_metodo && (
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-2">
+                Detalle por método de pago
+              </p>
+              <div className="space-y-2">
+                {Object.entries(resultado.esperado_por_metodo).map(
+                  ([metodo, esperado]) => {
+                    const real =
+                      resultado.montos_reales_por_metodo?.[metodo] || 0;
+                    const diff =
+                      resultado.diferencias_por_metodo?.[metodo] || 0;
+                    return (
+                      <div
+                        key={metodo}
+                        className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3"
+                      >
+                        <span className="text-sm font-medium text-gray-700">
+                          {metodosLabel[metodo] || metodo}
+                        </span>
+                        <div className="text-right space-y-0.5">
+                          <p className="text-xs text-gray-500">
+                            Esperado: {formatCurrency(esperado)}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            Real: {formatCurrency(real)}
+                          </p>
+                          <p
+                            className={`text-xs font-bold ${
+                              diff === 0
+                                ? "text-green-600"
+                                : diff > 0
+                                  ? "text-blue-600"
+                                  : "text-red-600"
+                            }`}
+                          >
+                            {diff >= 0 ? "+" : ""}
+                            {formatCurrency(diff)}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  },
+                )}
+              </div>
+            </div>
+          )}
 
           <button
             onClick={onClose}
@@ -956,6 +1030,24 @@ export default function Caja() {
                   <p className="text-2xl font-bold text-gray-800 mt-1">
                     {formatCurrency(caja.monto_inicial)}
                   </p>
+                  {caja.monto_esperado_apertura != null &&
+                    (Math.abs(caja.diferencia_apertura || 0) > 0.01 ? (
+                      <p
+                        className={`text-xs mt-1 font-medium ${
+                          caja.diferencia_apertura > 0
+                            ? "text-blue-600"
+                            : "text-red-600"
+                        }`}
+                      >
+                        Se esperaban {formatCurrency(caja.monto_esperado_apertura)} ·{" "}
+                        {caja.diferencia_apertura > 0 ? "sobran" : "faltan"}{" "}
+                        {formatCurrency(Math.abs(caja.diferencia_apertura))}
+                      </p>
+                    ) : (
+                      <p className="text-xs mt-1 text-green-600">
+                        ✓ Coincide con lo dejado en el cierre anterior
+                      </p>
+                    ))}
                 </div>
                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                   <p className="text-sm text-gray-500">Ventas del día</p>
@@ -1222,6 +1314,62 @@ export default function Caja() {
                         </p>
                       </div>
                     </div>
+
+                    {(c.monto_dejado != null ||
+                      c.monto_esperado_apertura != null) && (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {c.monto_esperado_apertura != null && (
+                          <div className="bg-gray-50 rounded-xl p-3">
+                            <p className="text-xs text-gray-500">
+                              Esperado al abrir
+                            </p>
+                            <p className="font-semibold text-gray-800">
+                              {formatCurrency(c.monto_esperado_apertura)}
+                            </p>
+                          </div>
+                        )}
+                        {c.monto_esperado_apertura != null && (
+                          <div className="bg-gray-50 rounded-xl p-3">
+                            <p className="text-xs text-gray-500">
+                              Diferencia al abrir
+                            </p>
+                            <p
+                              className={`font-semibold ${
+                                Math.abs(c.diferencia_apertura || 0) < 0.01
+                                  ? "text-green-600"
+                                  : c.diferencia_apertura > 0
+                                    ? "text-blue-600"
+                                    : "text-red-600"
+                              }`}
+                            >
+                              {Math.abs(c.diferencia_apertura || 0) < 0.01
+                                ? "Sin diferencia"
+                                : `${c.diferencia_apertura > 0 ? "+" : "-"}${formatCurrency(Math.abs(c.diferencia_apertura))}`}
+                            </p>
+                          </div>
+                        )}
+                        {c.monto_dejado != null && (
+                          <div className="bg-gray-50 rounded-xl p-3">
+                            <p className="text-xs text-gray-500">
+                              Dejado en caja
+                            </p>
+                            <p className="font-semibold text-gray-800">
+                              {formatCurrency(c.monto_dejado)}
+                            </p>
+                          </div>
+                        )}
+                        {c.monto_retirado != null && (
+                          <div className="bg-gray-50 rounded-xl p-3">
+                            <p className="text-xs text-gray-500">
+                              Efectivo retirado
+                            </p>
+                            <p className="font-semibold text-gray-800">
+                              {formatCurrency(c.monto_retirado)}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {c.movimientos?.length > 0 && (
                       <div>

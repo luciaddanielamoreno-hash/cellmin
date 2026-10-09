@@ -67,18 +67,53 @@ async def get_current_cash(current_user: dict = Depends(get_current_user)):
     del caja["_id"]
     return caja
 
+async def esperado_de_apertura(db, sucursal: str):
+    """Efectivo que la última caja cerrada de la sucursal dejó para hoy (o None)."""
+    ultima = await db.cajas.find_one(
+        {"estado": "cerrada", "sucursal": sucursal, "monto_dejado": {"$ne": None}},
+        sort=[("fecha_cierre", -1)],
+    )
+    if not ultima:
+        return None
+    return {
+        "esperado": ultima["monto_dejado"],
+        "caja_id": str(ultima["_id"]),
+        "fecha_cierre": ultima.get("fecha_cierre"),
+    }
+
+
+@router.get("/esperado")
+async def get_expected_opening(sucursal: str = None, current_user: dict = Depends(get_current_user)):
+    check_permission(current_user["role"], "caja:read")
+    db = get_db()
+    sucursal = sucursal or current_user["sucursales"][0]
+    dato = await esperado_de_apertura(db, sucursal)
+    return dato or {"esperado": None, "caja_id": None, "fecha_cierre": None}
+
+
 @router.post("/abrir")
 async def open_cash(data: CashOpen, current_user: dict = Depends(get_current_user)):
     check_permission(current_user["role"], "caja:open")
     db = get_db()
     sucursal = data.sucursal
+    if data.monto_inicial < 0:
+        raise HTTPException(status_code=400, detail="El monto inicial no puede ser negativo")
     caja_abierta = await db.cajas.find_one({"estado": "abierta", "sucursal": sucursal})
     if caja_abierta:
         raise HTTPException(status_code=400, detail="Ya hay una caja abierta en esta sucursal")
+
+    # Comparar con lo que quedó en la caja anterior
+    previo = await esperado_de_apertura(db, sucursal)
+    esperado = previo["esperado"] if previo else None
+    diferencia_apertura = round(data.monto_inicial - esperado, 2) if esperado is not None else None
+
     new_caja = {
         "estado": "abierta",
         "sucursal": sucursal,
         "monto_inicial": data.monto_inicial,
+        "monto_esperado_apertura": esperado,
+        "diferencia_apertura": diferencia_apertura,
+        "caja_anterior_id": previo["caja_id"] if previo else None,
         "movimientos": [],
         "usuario_apertura_id": current_user["user_id"],
         "fecha_apertura": datetime.utcnow(),
@@ -93,7 +128,8 @@ async def open_cash(data: CashOpen, current_user: dict = Depends(get_current_use
     rol=current_user["role"],
     accion="abrir",
     modulo="caja",
-    descripcion=f"Caja abierta en {sucursal}"
+    descripcion=f"Caja abierta en {sucursal}. Inicial: {data.monto_inicial}"
+    + (f". Esperado: {esperado}. Diferencia: {diferencia_apertura}" if esperado is not None else "")
     )
 
     return {"message": "Caja abierta correctamente", "id": str(result.inserted_id)}
@@ -177,6 +213,18 @@ async def close_cash(data: CashClose, current_user: dict = Depends(get_current_u
 
     monto_esperado_total = sum(esperado_por_metodo.values())
     monto_real_total = sum(m.monto for m in data.montos_por_metodo)
+
+    # Efectivo que se deja en caja para mañana; el resto del efectivo se retira
+    efectivo_contado = sum(m.monto for m in data.montos_por_metodo if m.metodo == "efectivo")
+    if data.dejar_en_caja < 0:
+        raise HTTPException(status_code=400, detail="El monto a dejar en caja no puede ser negativo")
+    if data.dejar_en_caja > efectivo_contado + 0.001:
+        raise HTTPException(
+            status_code=400,
+            detail="No podés dejar en caja más efectivo del que contaste",
+        )
+    monto_dejado = round(data.dejar_en_caja, 2)
+    monto_retirado = round(efectivo_contado - monto_dejado, 2)
     diferencia_total = monto_real_total - monto_esperado_total
 
     diferencias_por_metodo = {}
@@ -198,6 +246,8 @@ async def close_cash(data: CashClose, current_user: dict = Depends(get_current_u
             "diferencias_por_metodo": diferencias_por_metodo,
             "usuario_cierre_id": current_user["user_id"],
             "fecha_cierre": datetime.utcnow(),
+            "monto_dejado": monto_dejado,
+            "monto_retirado": monto_retirado,
             "notas_cierre": data.notas
         }}
     )
@@ -222,6 +272,11 @@ async def close_cash(data: CashClose, current_user: dict = Depends(get_current_u
         "diferencia": diferencia_total,
         "montos_reales_por_metodo": {m.metodo: m.monto for m in data.montos_por_metodo},
         "diferencias_por_metodo": diferencias_por_metodo,
+        "monto_dejado": monto_dejado,
+        "monto_retirado": monto_retirado,
+        "monto_inicial": caja["monto_inicial"],
+        "monto_esperado_apertura": caja.get("monto_esperado_apertura"),
+        "diferencia_apertura": caja.get("diferencia_apertura"),
     }
 
 @router.get("/historial")

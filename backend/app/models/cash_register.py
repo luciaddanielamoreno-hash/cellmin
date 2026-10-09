@@ -20,6 +20,9 @@ class CashOpen(BaseModel):
 
 class CashClose(BaseModel):
     montos_por_metodo: List[MontoPorMetodo]
+    # Efectivo que queda en la caja para el día siguiente (será el monto
+    # inicial esperado de la próxima apertura). El resto se retira.
+    dejar_en_caja: float = 0
     notas: Optional[str] = None
 
 class CashResponse(BaseModel):

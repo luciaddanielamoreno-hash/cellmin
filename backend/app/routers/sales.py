@@ -263,6 +263,14 @@ async def cancel_sale(sale_id: str, current_user: dict = Depends(get_current_use
             detail="Para cancelar una venta hace falta una caja abierta, donde se registra la devolución del dinero.",
         )
 
+    # Solo se pueden cancelar ventas de la caja abierta: las de cajas ya
+    # cerradas quedaron incluidas en un cierre y no se pueden modificar.
+    if sale.get("sucursal") != caja.get("sucursal") or sale["fecha"] < caja["fecha_apertura"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Esta venta corresponde a una caja anterior (ya cerrada), por eso no se puede cancelar.",
+        )
+
     # Marcar como cancelada solo si seguía completada (evita doble cancelación simultánea)
     resultado = await db.ventas.update_one(
         {"_id": oid, "estado": "completada"},

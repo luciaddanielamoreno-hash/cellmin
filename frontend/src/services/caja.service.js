@@ -6,6 +6,11 @@ export const cajaService = {
     return response.data;
   },
 
+  getEsperado: async (sucursal) => {
+    const response = await api.get("/cash/esperado", { params: { sucursal } });
+    return response.data;
+  },
+
   abrir: async (data) => {
     const response = await api.post("/cash/abrir", data);
     return response.data;

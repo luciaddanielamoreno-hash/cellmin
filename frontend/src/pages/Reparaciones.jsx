@@ -20,6 +20,7 @@ import {
 import { reparacionesService } from "../services/reparaciones.service";
 import { clientesService } from "../services/clientes.service";
 import toast from "react-hot-toast";
+import PrecioUSD from "../components/ui/PrecioUSD";
 import {
   formatCurrency,
   formatDateTime,
@@ -270,7 +271,10 @@ function SelectorTipos({ tiposDisponibles, tiposSeleccionados, onToggle }) {
           </div>
           <div className="flex justify-between text-sm font-bold text-blue-800 border-t border-blue-200 pt-2">
             <span>Total</span>
-            <span>{formatCurrency(precioTotal)}</span>
+            <span>
+              {formatCurrency(precioTotal)}{" "}
+              <PrecioUSD pesos={precioTotal} className="!text-blue-500" />
+            </span>
           </div>
         </div>
       )}
@@ -1885,6 +1889,7 @@ function GestionTiposReparacion() {
                     </td>
                     <td className="px-6 py-4 text-sm font-semibold text-gray-800">
                       {formatCurrency(tipo.precio)}
+                      <PrecioUSD pesos={tipo.precio} className="block" />
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
@@ -1943,7 +1948,8 @@ function GestionTiposReparacion() {
                         )}
                       </div>
                       <p className="text-sm font-semibold text-gray-700">
-                        {formatCurrency(tipo.precio)}
+                        {formatCurrency(tipo.precio)}{" "}
+                        <PrecioUSD pesos={tipo.precio} />
                       </p>
                       {tipo.descripcion && (
                         <p className="text-xs text-gray-500">

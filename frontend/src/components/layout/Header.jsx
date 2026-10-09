@@ -1,11 +1,14 @@
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { LogOut, User } from "lucide-react";
+import { LogOut, User, DollarSign } from "lucide-react";
+import { useCotizacion } from "../../hooks/useCotizacion";
+import { formatCurrency } from "../../utils/helpers";
 import toast from "react-hot-toast";
 
 export default function Header() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const cotizacion = useCotizacion();
 
   const handleLogout = () => {
     logout();
@@ -28,6 +31,33 @@ export default function Header() {
         </span>
       </div>
       <div className="flex items-center gap-3">
+        {cotizacion.cargado && !cotizacion.disponible && (
+          <div
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-500"
+            title="No se pudo obtener la cotización del dólar. Los precios en USD no se muestran."
+          >
+            <DollarSign size={13} />
+            <span>Dólar no disponible</span>
+          </div>
+        )}
+        {cotizacion.disponible && (
+          <div
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium ${
+              cotizacion.obsoleta
+                ? "bg-yellow-50 text-yellow-700"
+                : "bg-green-50 text-green-700"
+            }`}
+            title={
+              cotizacion.obsoleta
+                ? "No se pudo actualizar: se usa el último valor conocido"
+                : "Dólar blue (venta)"
+            }
+          >
+            <DollarSign size={13} />
+            <span>Blue {formatCurrency(cotizacion.venta)}</span>
+            {cotizacion.obsoleta && <span className="hidden sm:inline">· desactualizado</span>}
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
             <User size={16} className="text-white" />

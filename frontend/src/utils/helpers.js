@@ -5,6 +5,14 @@ export const formatCurrency = (amount) => {
   }).format(amount);
 };
 
+export const formatUSD = (amount) => {
+  return new Intl.NumberFormat("es-AR", {
+    style: "currency",
+    currency: "USD",
+    currencyDisplay: "code",
+  }).format(amount);
+};
+
 export const formatDate = (date) => {
   return new Intl.DateTimeFormat("es-AR", {
     day: "2-digit",

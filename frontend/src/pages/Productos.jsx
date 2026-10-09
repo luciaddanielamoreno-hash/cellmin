@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { productosService } from "../services/productos.service";
 import toast from "react-hot-toast";
+import PrecioUSD from "../components/ui/PrecioUSD";
 import ThOrdenable from "../components/ui/ThOrdenable";
 import { useTabla } from "../hooks/useTabla";
 import { formatCurrency } from "../utils/helpers";
@@ -571,6 +572,14 @@ function FilaProducto({ producto, categorias, onEdit, onDelete }) {
           {producto.tiene_variantes
             ? `Desde ${formatCurrency(Math.min(...producto.variantes.map((v) => v.precio_venta)))}`
             : formatCurrency(producto.precio_venta)}
+          <PrecioUSD
+            className="block"
+            pesos={
+              producto.tiene_variantes
+                ? Math.min(...producto.variantes.map((v) => v.precio_venta))
+                : producto.precio_venta
+            }
+          />
         </td>
         <td className="px-6 py-4">
           {producto.tiene_variantes ? (
@@ -657,6 +666,7 @@ function FilaProducto({ producto, categorias, onEdit, onDelete }) {
                         </td>
                         <td className="px-4 py-2 text-gray-600">
                           {formatCurrency(v.precio_venta)}
+                          <PrecioUSD pesos={v.precio_venta} className="block" />
                         </td>
                         <td className="px-4 py-2">
                           <span
@@ -713,6 +723,7 @@ function FilaProducto({ producto, categorias, onEdit, onDelete }) {
                       </td>
                       <td className="px-4 py-2 text-gray-600">
                         {formatCurrency(producto.precio_venta)}
+                        <PrecioUSD pesos={producto.precio_venta} className="block" />
                       </td>
                       <td className="px-4 py-2">
                         <span

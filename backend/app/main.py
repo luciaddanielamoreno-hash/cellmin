@@ -9,6 +9,7 @@ from app.routers import (
 )
 from app.routers import repair_types
 import time
+from app.routers import cotizacion
 import traceback
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -48,6 +49,7 @@ app.include_router(repairs.router,       prefix="/api/repairs",     tags=["Repar
 app.include_router(reports.router,       prefix="/api/reports",     tags=["Reportes"])
 app.include_router(backup.router,        prefix="/api/backup",      tags=["Backup"])
 app.include_router(repair_types.router, prefix="/api/repair-types", tags=["Tipos de Reparación"])
+app.include_router(cotizacion.router, prefix="/api/cotizacion", tags=["Cotización"])
 
 
 @app.middleware("http")

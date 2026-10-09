@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Plus, Edit, Trash2, Wrench, ToggleLeft } from "lucide-react";
 import { tiposReparacionService } from "../services/tiposReparacion.service";
 import toast from "react-hot-toast";
+import PrecioUSD from "../components/ui/PrecioUSD";
 import Paginacion from "../components/ui/Paginacion";
 import ThOrdenable from "../components/ui/ThOrdenable";
 import { useTabla } from "../hooks/useTabla";
@@ -225,6 +226,7 @@ export default function TiposReparacion() {
                     </td>
                     <td className="px-6 py-4 text-sm font-semibold text-gray-800">
                       {formatCurrency(tipo.precio)}
+                      <PrecioUSD pesos={tipo.precio} className="block" />
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
@@ -283,7 +285,8 @@ export default function TiposReparacion() {
                         )}
                       </div>
                       <p className="text-sm font-semibold text-gray-700">
-                        {formatCurrency(tipo.precio)}
+                        {formatCurrency(tipo.precio)}{" "}
+                        <PrecioUSD pesos={tipo.precio} />
                       </p>
                       {tipo.descripcion && (
                         <p className="text-xs text-gray-500">

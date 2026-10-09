@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import InputNumero from "../components/ui/InputNumero";
 import { Plus, Edit, Trash2, Wrench, ToggleLeft } from "lucide-react";
 import { tiposReparacionService } from "../services/tiposReparacion.service";
 import toast from "react-hot-toast";
@@ -75,12 +76,10 @@ function TipoModal({ tipo, onClose, onSave }) {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Precio *
             </label>
-            <input
-              type="number"
-              required
-              min="0"
+            <InputNumero
               value={form.precio}
-              onChange={(e) => setForm({ ...form, precio: e.target.value })}
+              onChange={(v) => setForm({ ...form, precio: v })}
+              required
               placeholder="$ 0.00"
               className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import InputNumero from "../components/ui/InputNumero";
 import {
   Plus,
   Search,
@@ -384,18 +385,16 @@ function NuevaCompraModal({ onClose, onSave }) {
                       <label className="block text-xs font-medium text-gray-600 mb-1">
                         Cantidad *
                       </label>
-                      <input
-                        type="number"
-                        required
-                        min="1"
+                      <InputNumero
                         value={item.cantidad}
-                        onChange={(e) =>
+                        onChange={(v) =>
                           updateItem(
                             index,
                             "cantidad",
-                            parseInt(e.target.value),
-                          )
-                        }
+                            v,
+                          )}
+                        decimales={0}
+                        required
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
@@ -404,18 +403,15 @@ function NuevaCompraModal({ onClose, onSave }) {
                       <label className="block text-xs font-medium text-gray-600 mb-1">
                         Precio unitario *
                       </label>
-                      <input
-                        type="number"
-                        required
-                        min="0"
+                      <InputNumero
                         value={item.precio_unitario}
-                        onChange={(e) =>
+                        onChange={(v) =>
                           updateItem(
                             index,
                             "precio_unitario",
-                            parseFloat(e.target.value),
-                          )
-                        }
+                            v,
+                          )}
+                        required
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>

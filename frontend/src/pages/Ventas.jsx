@@ -1,4 +1,5 @@
 import { cajaService } from "../services/caja.service";
+import InputNumero from "../components/ui/InputNumero";
 import { useState, useEffect } from "react";
 import {
   Plus,
@@ -531,12 +532,11 @@ function NuevaVentaModal({ onClose, onSave }) {
                       >
                         <Minus size={12} />
                       </button>
-                      <input
-                        type="number"
-                        min="1"
-                        max={item.stock_disponible}
+                      <InputNumero
                         value={item.cantidad}
-                        onChange={(e) => fijarCantidad(item.key, e.target.value)}
+                        onChange={(v) => fijarCantidad(item.key, v)}
+                        decimales={0}
+                        max={item.stock_disponible}
                         className="w-12 h-7 text-center text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                       <button
@@ -610,14 +610,14 @@ function NuevaVentaModal({ onClose, onSave }) {
               </div>
               {tipoAjuste !== "ninguno" && (
                 <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
+                  <InputNumero
                     value={porcentajeAjuste}
-                    onChange={(e) => setPorcentajeAjuste(e.target.value)}
-                    className={`flex-1 ${inputBase}`}
+                    onChange={(v) => setPorcentajeAjuste(v)}
+                    decimales={2}
+                    completarDecimales={false}
+                    max="100"
                     placeholder="0"
+                    className={`flex-1 ${inputBase}`}
                   />
                   <span className="text-gray-500 font-medium">%</span>
                   <span
@@ -663,13 +663,10 @@ function NuevaVentaModal({ onClose, onSave }) {
                   </select>
                   {(pagoMixto || pago.metodo === "efectivo") && (
                     <div className="relative">
-                      <input
-                        type="number"
-                        min="0"
+                      <InputNumero
                         value={pago.monto}
-                        onChange={(e) =>
-                          handlePagoChange(index, "monto", e.target.value)
-                        }
+                        onChange={(v) =>
+                          handlePagoChange(index, "monto", v)}
                         placeholder={pagoMixto ? "Monto" : "Recibido"}
                         className={inputBase}
                       />

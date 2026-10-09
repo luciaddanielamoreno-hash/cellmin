@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import InputNumero from "../components/ui/InputNumero";
 import {
   DollarSign,
   Plus,
@@ -672,12 +673,10 @@ function MovimientoModal({ onClose, onSave }) {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Monto *
             </label>
-            <input
-              type="number"
-              required
-              min="0"
+            <InputNumero
               value={form.monto}
-              onChange={(e) => setForm({ ...form, monto: e.target.value })}
+              onChange={(v) => setForm({ ...form, monto: v })}
+              required
               placeholder="$ 0.00"
               className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />

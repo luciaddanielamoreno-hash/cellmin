@@ -1,4 +1,5 @@
 import { tiposReparacionService } from "../services/tiposReparacion.service";
+import InputNumero from "../components/ui/InputNumero";
 import { useState, useEffect } from "react";
 import {
   Plus,
@@ -518,16 +519,14 @@ function NuevaReparacionModal({ onClose, onSave, cajaAbierta, userRol }) {
                   <label className="block text-xs text-gray-600 mb-1">
                     Garantía (días)
                   </label>
-                  <input
-                    type="number"
-                    min="0"
+                  <InputNumero
                     value={form.garantia_dias}
-                    onChange={(e) =>
+                    onChange={(v) =>
                       setForm({
                         ...form,
-                        garantia_dias: parseInt(e.target.value),
-                      })
-                    }
+                        garantia_dias: v,
+                      })}
+                    decimales={0}
                     className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -708,14 +707,11 @@ function NuevaReparacionModal({ onClose, onSave, cajaAbierta, userRol }) {
                         <label className="block text-xs text-gray-600 mb-1">
                           Monto de la seña
                         </label>
-                        <input
-                          type="number"
-                          min="0"
-                          max={precioTotal}
+                        <InputNumero
                           value={sena.monto}
-                          onChange={(e) =>
-                            setSena({ ...sena, monto: e.target.value })
-                          }
+                          onChange={(v) =>
+                            setSena({ ...sena, monto: v })}
+                          max={precioTotal}
                           placeholder="0"
                           className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
@@ -1051,13 +1047,10 @@ function PagoModal({ reparacion, onClose, onSave }) {
                     </option>
                   ))}
                 </select>
-                <input
-                  type="number"
-                  min="0"
+                <InputNumero
                   value={pago.monto}
-                  onChange={(e) =>
-                    handlePagoChange(index, "monto", e.target.value)
-                  }
+                  onChange={(v) =>
+                    handlePagoChange(index, "monto", v)}
                   placeholder="$ 0.00"
                   className="px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -1711,12 +1704,10 @@ function TipoModal({ tipo, onClose, onSave }) {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Precio *
             </label>
-            <input
-              type="number"
-              required
-              min="0"
+            <InputNumero
               value={form.precio}
-              onChange={(e) => setForm({ ...form, precio: e.target.value })}
+              onChange={(v) => setForm({ ...form, precio: v })}
+              required
               placeholder="$ 0.00"
               className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />

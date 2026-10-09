@@ -1,4 +1,6 @@
 import SelectorCategoria from "../components/ui/SelectorCategoria";
+import InputNumero from "../components/ui/InputNumero";
+import InputPrecio, { SelectorMoneda } from "../components/ui/InputPrecio";
 import { categoriasService } from "../services/categorias.service";
 import { useState, useEffect } from "react";
 import {
@@ -30,7 +32,14 @@ const generarCodigoBarras = () => {
   return `${timestamp}${random}`;
 };
 
-function VarianteForm({ variante, index, onChange, onRemove, precioGlobal }) {
+function VarianteForm({
+  variante,
+  index,
+  onChange,
+  onRemove,
+  precioGlobal,
+  moneda,
+}) {
   return (
     <div className="border border-gray-200 rounded-xl p-4 space-y-3 bg-gray-50">
       <div className="flex items-center justify-between">
@@ -88,14 +97,13 @@ function VarianteForm({ variante, index, onChange, onRemove, precioGlobal }) {
               <label className="block text-xs font-medium text-gray-600 mb-1">
                 Precio costo *
               </label>
-              <input
-                type="number"
+              <InputPrecio
+                pesos={variante.precio_costo}
+                onChange={(v) =>
+                  onChange(index, "precio_costo", v)}
                 required
-                min="0"
-                value={variante.precio_costo}
-                onChange={(e) =>
-                  onChange(index, "precio_costo", parseFloat(e.target.value))
-                }
+                              moneda={moneda}
+                key={moneda}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -103,14 +111,13 @@ function VarianteForm({ variante, index, onChange, onRemove, precioGlobal }) {
               <label className="block text-xs font-medium text-gray-600 mb-1">
                 Precio venta *
               </label>
-              <input
-                type="number"
+              <InputPrecio
+                pesos={variante.precio_venta}
+                onChange={(v) =>
+                  onChange(index, "precio_venta", v)}
                 required
-                min="0"
-                value={variante.precio_venta}
-                onChange={(e) =>
-                  onChange(index, "precio_venta", parseFloat(e.target.value))
-                }
+                              moneda={moneda}
+                key={moneda}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -120,13 +127,11 @@ function VarianteForm({ variante, index, onChange, onRemove, precioGlobal }) {
           <label className="block text-xs font-medium text-gray-600 mb-1">
             Stock actual
           </label>
-          <input
-            type="number"
-            min="0"
+          <InputNumero
             value={variante.stock_actual}
-            onChange={(e) =>
-              onChange(index, "stock_actual", parseInt(e.target.value))
-            }
+            onChange={(v) =>
+              onChange(index, "stock_actual", v)}
+            decimales={0}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
@@ -134,13 +139,11 @@ function VarianteForm({ variante, index, onChange, onRemove, precioGlobal }) {
           <label className="block text-xs font-medium text-gray-600 mb-1">
             Stock mínimo
           </label>
-          <input
-            type="number"
-            min="0"
+          <InputNumero
             value={variante.stock_minimo}
-            onChange={(e) =>
-              onChange(index, "stock_minimo", parseInt(e.target.value))
-            }
+            onChange={(v) =>
+              onChange(index, "stock_minimo", v)}
+            decimales={0}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
@@ -164,6 +167,7 @@ function ProductoModal({ producto, categorias, onClose, onSave }) {
     stock_minimo: producto?.stock_minimo || 0,
   });
   const [precioGlobal, setPrecioGlobal] = useState(false);
+  const [moneda, setMoneda] = useState("ars");
   const [precioCostoGlobal, setPrecioCostoGlobal] = useState("");
   const [precioVentaGlobal, setPrecioVentaGlobal] = useState("");
   const [loading, setLoading] = useState(false);
@@ -351,20 +355,21 @@ function ProductoModal({ producto, categorias, onClose, onSave }) {
             </label>
           </div>
 
+          <SelectorMoneda moneda={moneda} onChange={setMoneda} />
+
           {!form.tiene_variantes && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">
                   Precio costo *
                 </label>
-                <input
-                  type="number"
+                <InputPrecio
+                  pesos={form.precio_costo}
+                  onChange={(v) =>
+                    setForm({ ...form, precio_costo: v })}
                   required
-                  min="0"
-                  value={form.precio_costo}
-                  onChange={(e) =>
-                    setForm({ ...form, precio_costo: e.target.value })
-                  }
+                                  moneda={moneda}
+                  key={moneda}
                   className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -372,14 +377,13 @@ function ProductoModal({ producto, categorias, onClose, onSave }) {
                 <label className="block text-xs font-medium text-gray-600 mb-1">
                   Precio venta *
                 </label>
-                <input
-                  type="number"
+                <InputPrecio
+                  pesos={form.precio_venta}
+                  onChange={(v) =>
+                    setForm({ ...form, precio_venta: v })}
                   required
-                  min="0"
-                  value={form.precio_venta}
-                  onChange={(e) =>
-                    setForm({ ...form, precio_venta: e.target.value })
-                  }
+                                  moneda={moneda}
+                  key={moneda}
                   className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -387,13 +391,11 @@ function ProductoModal({ producto, categorias, onClose, onSave }) {
                 <label className="block text-xs font-medium text-gray-600 mb-1">
                   Stock actual
                 </label>
-                <input
-                  type="number"
-                  min="0"
+                <InputNumero
                   value={form.stock_actual}
-                  onChange={(e) =>
-                    setForm({ ...form, stock_actual: e.target.value })
-                  }
+                  onChange={(v) =>
+                    setForm({ ...form, stock_actual: v })}
+                  decimales={0}
                   className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -401,13 +403,11 @@ function ProductoModal({ producto, categorias, onClose, onSave }) {
                 <label className="block text-xs font-medium text-gray-600 mb-1">
                   Stock mínimo
                 </label>
-                <input
-                  type="number"
-                  min="0"
+                <InputNumero
                   value={form.stock_minimo}
-                  onChange={(e) =>
-                    setForm({ ...form, stock_minimo: e.target.value })
-                  }
+                  onChange={(v) =>
+                    setForm({ ...form, stock_minimo: v })}
+                  decimales={0}
                   className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -438,11 +438,11 @@ function ProductoModal({ producto, categorias, onClose, onSave }) {
                       <label className="block text-xs font-medium text-blue-700 mb-1">
                         Precio costo global
                       </label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={precioCostoGlobal}
-                        onChange={(e) => setPrecioCostoGlobal(e.target.value)}
+                      <InputPrecio
+                        pesos={precioCostoGlobal}
+                        onChange={(v) => setPrecioCostoGlobal(v)}
+                                              moneda={moneda}
+                        key={moneda}
                         className="w-full px-3 py-2 border border-blue-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
@@ -450,11 +450,11 @@ function ProductoModal({ producto, categorias, onClose, onSave }) {
                       <label className="block text-xs font-medium text-blue-700 mb-1">
                         Precio venta global
                       </label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={precioVentaGlobal}
-                        onChange={(e) => setPrecioVentaGlobal(e.target.value)}
+                      <InputPrecio
+                        pesos={precioVentaGlobal}
+                        onChange={(v) => setPrecioVentaGlobal(v)}
+                                              moneda={moneda}
+                        key={moneda}
                         className="w-full px-3 py-2 border border-blue-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
@@ -492,6 +492,7 @@ function ProductoModal({ producto, categorias, onClose, onSave }) {
                   onChange={handleVarianteChange}
                   onRemove={() => removeVariante(i)}
                   precioGlobal={precioGlobal}
+                  moneda={moneda}
                 />
               ))}
               {form.variantes.length === 0 && (
@@ -1382,14 +1383,11 @@ export default function Productos() {
                   <label className="block text-xs font-medium text-gray-600 mb-1">
                     Precio mínimo
                   </label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="$ 0"
+                  <InputNumero
                     value={filtros.precio_min}
-                    onChange={(e) =>
-                      setFiltros({ ...filtros, precio_min: e.target.value })
-                    }
+                    onChange={(v) =>
+                      setFiltros({ ...filtros, precio_min: v })}
+                    placeholder="$ 0"
                     className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -1397,14 +1395,11 @@ export default function Productos() {
                   <label className="block text-xs font-medium text-gray-600 mb-1">
                     Precio máximo
                   </label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="$ 0"
+                  <InputNumero
                     value={filtros.precio_max}
-                    onChange={(e) =>
-                      setFiltros({ ...filtros, precio_max: e.target.value })
-                    }
+                    onChange={(v) =>
+                      setFiltros({ ...filtros, precio_max: v })}
+                    placeholder="$ 0"
                     className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>

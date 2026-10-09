@@ -230,7 +230,19 @@ export default function Stock() {
     p.nombre.toLowerCase().includes(search.toLowerCase()),
   );
 
-  const alertas = productos.filter((p) => p.alerta);
+  // Un artículo es un producto simple o cada variante de un producto
+  const articulosBajos = (p) =>
+    p.tiene_variantes
+      ? (p.variantes || []).filter((v) => v.stock_actual < v.stock_minimo)
+          .length
+      : p.stock_actual < p.stock_minimo
+        ? 1
+        : 0;
+  const alertas = productos.filter((p) => articulosBajos(p) > 0);
+  const totalArticulosBajos = productos.reduce(
+    (a, p) => a + articulosBajos(p),
+    0,
+  );
 
   const stockTotal = (p) =>
     p.tiene_variantes
@@ -242,7 +254,7 @@ export default function Stock() {
     ordenInicial: { campo: "nombre", dir: "asc" },
     accessors: {
       stock: stockTotal,
-      estado: (p) => (p.alerta ? 0 : 1),
+      estado: (p) => (articulosBajos(p) > 0 ? 0 : 1),
     },
   });
   const movimientosFiltrados = movimientos.filter((m) => {
@@ -309,8 +321,13 @@ export default function Stock() {
         <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center gap-3">
           <AlertTriangle size={20} className="text-red-500 shrink-0" />
           <p className="text-sm text-red-700">
-            <span className="font-semibold">{alertas.length} producto(s)</span>{" "}
+            <span className="font-semibold">
+              {totalArticulosBajos}{" "}
+              {totalArticulosBajos === 1 ? "artículo" : "artículos"}
+            </span>{" "}
             con stock bajo o agotado
+            {alertas.length !== totalArticulosBajos &&
+              ` (en ${alertas.length} productos)`}
           </p>
         </div>
       )}
@@ -670,6 +687,7 @@ export default function Stock() {
                       compra: "Compra",
                       venta: "Venta",
                       cancelacion_compra: "Cancelación de compra",
+                      cancelacion_venta: "Cancelación de venta",
                     }[m.motivo] || m.motivo;
                   return (
                     <tr key={i} className="hover:bg-gray-50 transition-[background-color]">
@@ -752,6 +770,7 @@ export default function Stock() {
                     compra: "Compra",
                     venta: "Venta",
                     cancelacion_compra: "Cancelación de compra",
+                      cancelacion_venta: "Cancelación de venta",
                   }[m.motivo] || m.motivo;
                 return (
                   <div

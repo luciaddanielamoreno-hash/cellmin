@@ -20,7 +20,7 @@ async def get_current_cash(current_user: dict = Depends(get_current_user)):
 
     # Ventas del día
     ventas = await db.ventas.find({
-        "estado": "completada",
+        "estado": {"$in": ["completada", "cancelada"]},
         "fecha": {"$gte": caja["fecha_apertura"]},
         "sucursal": sucursal
     }).to_list(1000)
@@ -34,7 +34,8 @@ async def get_current_cash(current_user: dict = Depends(get_current_user)):
         movimientos_completos.append({
             "tipo": "ingreso",
             "concepto": "venta",
-            "descripcion": f"Venta {v.get('numero_venta', '')}",
+            "descripcion": f"Venta {v.get('numero_venta', '')}"
+            + (" (cancelada)" if v.get("estado") == "cancelada" else ""),
             "metodo_pago": v.get("metodo_pago", ""),
             "monto": v["total"],
             "fecha": v["fecha"]
@@ -130,7 +131,7 @@ async def close_cash(data: CashClose, current_user: dict = Depends(get_current_u
         raise HTTPException(status_code=400, detail="No hay caja abierta en tu sucursal")
 
     ventas = await db.ventas.find({
-        "estado": "completada",
+        "estado": {"$in": ["completada", "cancelada"]},
         "fecha": {"$gte": caja["fecha_apertura"]},
         "sucursal": sucursal
     }).to_list(1000)

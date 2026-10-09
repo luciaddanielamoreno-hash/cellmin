@@ -29,7 +29,11 @@ async def get_stock_productos(current_user: dict = Depends(get_current_user)):
             "variantes": p.get("variantes", []),
             "stock_actual": p.get("stock_actual", 0),
             "stock_minimo": p.get("stock_minimo", 0),
-            "alerta": p.get("stock_actual", 0) < p.get("stock_minimo", 0)
+            "alerta": (
+                any(v.get("stock_actual", 0) < v.get("stock_minimo", 0) for v in p.get("variantes", []))
+                if p.get("tiene_variantes", False)
+                else p.get("stock_actual", 0) < p.get("stock_minimo", 0)
+            )
         })
     return result
 

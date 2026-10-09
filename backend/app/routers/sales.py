@@ -151,12 +151,15 @@ async def create_sale(sale: SaleCreate, current_user: dict = Depends(get_current
                     detail=f"El total pagado ({formato_monto(pagado)}) no coincide con el total ({formato_monto(total)})",
                 )
             metodo_pago = " + ".join(f"{p.metodo}: {formato_monto(p.monto)}" for p in sale.pagos)
+            pagos_venta = [{"metodo": p.metodo, "monto": redondear(p.monto)} for p in sale.pagos]
         else:
             metodo_pago = sale.pagos[0].metodo
+            pagos_venta = [{"metodo": metodo_pago, "monto": total}]
     else:
         if sale.metodo_pago not in METODOS_VALIDOS:
             raise HTTPException(status_code=400, detail="Medio de pago inválido")
         metodo_pago = sale.metodo_pago
+        pagos_venta = [{"metodo": metodo_pago, "monto": total}]
 
     # 5. Registrar la venta
     numero = await get_next_number(db, "ventas", "V-")
@@ -170,6 +173,7 @@ async def create_sale(sale: SaleCreate, current_user: dict = Depends(get_current
         "interes": interes,
         "total": total,
         "metodo_pago": metodo_pago,
+        "pagos": pagos_venta,
         "sucursal": sale.sucursal,
         "notas": sale.notas,
         "numero_venta": numero,
@@ -215,16 +219,115 @@ async def create_sale(sale: SaleCreate, current_user: dict = Depends(get_current
     return {"message": "Venta registrada", "numero_venta": numero, "id": str(result.inserted_id), "total": total}
 
 
+def pagos_de_venta(venta: dict) -> list:
+    """Cómo se pagó la venta, por método. Las ventas nuevas guardan 'pagos';
+    en las viejas se reconstruye desde el texto de metodo_pago."""
+    if venta.get("pagos"):
+        return venta["pagos"]
+    texto = venta.get("metodo_pago", "efectivo")
+    if "+" not in texto:
+        return [{"metodo": texto, "monto": venta["total"]}]
+    pagos = []
+    for parte in texto.split("+"):
+        if ":" not in parte:
+            continue
+        metodo, monto_txt = parte.split(":", 1)
+        try:
+            monto = float(monto_txt.replace("$", "").replace(".", "").replace(",", ".").strip())
+        except ValueError:
+            continue
+        pagos.append({"metodo": metodo.strip(), "monto": monto})
+    return pagos
+
+
 @router.put("/{sale_id}/cancel")
 async def cancel_sale(sale_id: str, current_user: dict = Depends(get_current_user)):
     check_permission(current_user["role"], "ventas:cancel")
     db = get_db()
-    sale = await db.ventas.find_one({"_id": ObjectId(sale_id)})
+    try:
+        oid = ObjectId(sale_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
+    sale = await db.ventas.find_one({"_id": oid})
     if not sale:
         raise HTTPException(status_code=404, detail="Venta no encontrada")
     if sale["estado"] == "cancelada":
         raise HTTPException(status_code=400, detail="La venta ya está cancelada")
 
-    await db.ventas.update_one({"_id": ObjectId(sale_id)}, {"$set": {"estado": "cancelada"}})
+    # La devolución del dinero se registra en la caja abierta de hoy
+    sucursal = current_user["sucursales"][0]
+    caja = await db.cajas.find_one({"estado": "abierta", "sucursal": sucursal})
+    if not caja:
+        raise HTTPException(
+            status_code=400,
+            detail="Para cancelar una venta hace falta una caja abierta, donde se registra la devolución del dinero.",
+        )
 
-    # Devolver stock (producto base o variante) y registrar
+    # Marcar como cancelada solo si seguía completada (evita doble cancelación simultánea)
+    resultado = await db.ventas.update_one(
+        {"_id": oid, "estado": "completada"},
+        {"$set": {
+            "estado": "cancelada",
+            "fecha_cancelacion": datetime.utcnow(),
+            "cancelada_por": current_user["user_id"],
+        }},
+    )
+    if resultado.modified_count == 0:
+        raise HTTPException(status_code=400, detail="La venta ya está cancelada")
+
+    numero = sale.get("numero_venta", "")
+
+    # Devolver stock (producto base o variante) y registrar el movimiento
+    for item in sale.get("items", []):
+        variante = item.get("variante_nombre")
+        await db.stock_movimientos.insert_one({
+            "producto_id": item["producto_id"],
+            "variante_nombre": variante,
+            "tipo": "entrada",
+            "cantidad": item["cantidad"],
+            "motivo": "cancelacion_venta",
+            "referencia_id": sale_id,
+            "usuario_id": current_user["user_id"],
+            "fecha": datetime.utcnow(),
+        })
+        if variante:
+            await db.productos.update_one(
+                {"_id": ObjectId(item["producto_id"]), "variantes.nombre": variante},
+                {"$inc": {"variantes.$.stock_actual": item["cantidad"]}},
+            )
+        else:
+            await db.productos.update_one(
+                {"_id": ObjectId(item["producto_id"])},
+                {"$inc": {"stock_actual": item["cantidad"]}},
+            )
+
+    # Devolver el dinero: un egreso por cada medio con el que se cobró
+    egresos = []
+    for p in pagos_de_venta(sale):
+        if p["monto"] <= 0:
+            continue
+        egresos.append({
+            "tipo": "egreso",
+            "monto": p["monto"],
+            "motivo": f"Cancelación venta {numero} — {p['metodo']}",
+            "metodo_pago": p["metodo"],
+            "concepto": "cancelacion_venta",
+            "referencia_id": sale_id,
+            "notas": f"Cancelación de la venta {numero}",
+            "usuario_id": current_user["user_id"],
+            "fecha": datetime.utcnow(),
+        })
+    if egresos:
+        await db.cajas.update_one({"_id": caja["_id"]}, {"$push": {"movimientos": {"$each": egresos}}})
+
+    await registrar_auditoria(
+        db=db,
+        usuario_id=current_user["user_id"],
+        usuario_nombre="",
+        rol=current_user["role"],
+        accion="cancelar",
+        modulo="ventas",
+        descripcion=f"Venta cancelada: {numero}. Devuelto: {sum(e['monto'] for e in egresos)}",
+    )
+
+    return {"message": "Venta cancelada", "numero_venta": numero, "total_devuelto": sum(e["monto"] for e in egresos)}

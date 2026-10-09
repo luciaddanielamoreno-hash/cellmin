@@ -185,7 +185,8 @@ function CerrarCajaModal({ caja, onClose, onSave }) {
           }
         } else if (
           m.concepto === "manual" ||
-          m.concepto === "devolucion_reparacion"
+          m.concepto === "devolucion_reparacion" ||
+          m.concepto === "cancelacion_venta"
         ) {
           const metodo = m.metodo_pago?.toLowerCase();
           if (metodo && result.hasOwnProperty(metodo)) {
@@ -1015,8 +1016,11 @@ export default function Caja() {
                                     ? "Venta"
                                     : m.concepto === "reparacion"
                                       ? "Reparación"
-                                      : m.concepto === "devolucion_reparacion"
-                                        ? "Devolución"
+                                      : m.concepto === "devolucion_reparacion" ||
+                                        m.concepto === "cancelacion_venta"
+                                        ? m.concepto === "cancelacion_venta"
+                                          ? "Cancelación"
+                                          : "Devolución"
                                         : m.tipo === "ingreso"
                                           ? "Ingreso"
                                           : "Egreso"}
@@ -1071,8 +1075,11 @@ export default function Caja() {
                                   ? "Venta"
                                   : m.concepto === "reparacion"
                                     ? "Reparación"
-                                    : m.concepto === "devolucion_reparacion"
-                                      ? "Devolución"
+                                    : m.concepto === "devolucion_reparacion" ||
+                                      m.concepto === "cancelacion_venta"
+                                      ? m.concepto === "cancelacion_venta"
+                                        ? "Cancelación"
+                                        : "Devolución"
                                       : m.tipo === "ingreso"
                                         ? "Ingreso"
                                         : "Egreso"}

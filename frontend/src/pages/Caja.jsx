@@ -180,7 +180,10 @@ function CerrarCajaModal({ caja, onClose, onSave }) {
           if (metodo && result.hasOwnProperty(metodo)) {
             result[metodo] = (result[metodo] || 0) + m.monto;
           }
-        } else if (m.concepto === "manual") {
+        } else if (
+          m.concepto === "manual" ||
+          m.concepto === "devolucion_reparacion"
+        ) {
           const metodo = m.metodo_pago?.toLowerCase();
           if (metodo && result.hasOwnProperty(metodo)) {
             result[metodo] =
@@ -1008,9 +1011,11 @@ export default function Caja() {
                                     ? "Venta"
                                     : m.concepto === "reparacion"
                                       ? "Reparación"
-                                      : m.tipo === "ingreso"
-                                        ? "Ingreso"
-                                        : "Egreso"}
+                                      : m.concepto === "devolucion_reparacion"
+                                        ? "Devolución"
+                                        : m.tipo === "ingreso"
+                                          ? "Ingreso"
+                                          : "Egreso"}
                                 </span>
                               </td>
                               <td className="px-6 py-3 text-sm text-gray-700">
@@ -1062,9 +1067,11 @@ export default function Caja() {
                                   ? "Venta"
                                   : m.concepto === "reparacion"
                                     ? "Reparación"
-                                    : m.tipo === "ingreso"
-                                      ? "Ingreso"
-                                      : "Egreso"}
+                                    : m.concepto === "devolucion_reparacion"
+                                      ? "Devolución"
+                                      : m.tipo === "ingreso"
+                                        ? "Ingreso"
+                                        : "Egreso"}
                               </span>
                             </div>
                             <p className="text-sm text-gray-700">

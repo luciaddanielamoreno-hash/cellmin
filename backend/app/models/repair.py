@@ -7,6 +7,12 @@ class Equipo(BaseModel):
     modelo: str
     imei: Optional[str] = None
     problema_descripcion: Optional[str] = None
+    bloqueo_tipo: Optional[str] = "ninguno"  # ninguno, patron, password, pin
+    bloqueo_valor: Optional[str] = None      # patron: "1-5-9-6" (puntos 1 a 9)
+
+class Sena(BaseModel):
+    monto: float
+    metodo: str  # efectivo, transferencia, debito, credito
 
 class TipoReparacionItem(BaseModel):
     tipo_id: str
@@ -26,6 +32,7 @@ class RepairCreate(BaseModel):
     notas_internas: Optional[str] = None
     garantia_dias: int = 90
     estado: str = "en_diagnostico"
+    sena: Optional[Sena] = None
 
 class RepairUpdate(BaseModel):
     estado: Optional[str] = None

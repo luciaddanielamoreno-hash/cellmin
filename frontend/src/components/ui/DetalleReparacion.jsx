@@ -1,3 +1,4 @@
+import PatronBloqueo from "./PatronBloqueo";
 import {
   ESTADOS_REP,
   formatCurrency,
@@ -73,6 +74,27 @@ export default function DetalleReparacion({ reparacion, cliente }) {
             <strong>Problema:</strong> {reparacion.equipo.problema_descripcion}
           </p>
         )}
+        <div className="text-sm text-gray-600">
+          <strong>Bloqueo de pantalla:</strong>{" "}
+          {(!reparacion.equipo?.bloqueo_tipo ||
+            reparacion.equipo.bloqueo_tipo === "ninguno") && "Sin bloqueo"}
+          {reparacion.equipo?.bloqueo_tipo === "pin" && (
+            <span>
+              PIN <span className="font-mono">{reparacion.equipo.bloqueo_valor}</span>
+            </span>
+          )}
+          {reparacion.equipo?.bloqueo_tipo === "password" && (
+            <span>
+              Contraseña{" "}
+              <span className="font-mono">{reparacion.equipo.bloqueo_valor}</span>
+            </span>
+          )}
+          {reparacion.equipo?.bloqueo_tipo === "patron" && (
+            <div className="mt-2">
+              <PatronBloqueo value={reparacion.equipo.bloqueo_valor} readOnly />
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -124,7 +146,13 @@ export default function DetalleReparacion({ reparacion, cliente }) {
             <span>Total pagado</span>
             <span>{formatCurrency(reparacion.total_pagado || 0)}</span>
           </div>
-          {reparacion.saldo_pendiente > 0 && (
+          {reparacion.total_devuelto > 0 && (
+            <div className="flex justify-between text-sm font-bold text-gray-600 mt-1">
+              <span>Devuelto al cancelar</span>
+              <span>{formatCurrency(reparacion.total_devuelto)}</span>
+            </div>
+          )}
+          {reparacion.estado !== "cancelada" && reparacion.saldo_pendiente > 0 && (
             <div className="flex justify-between text-sm font-bold text-red-600 mt-1">
               <span>Saldo pendiente</span>
               <span>{formatCurrency(reparacion.saldo_pendiente)}</span>

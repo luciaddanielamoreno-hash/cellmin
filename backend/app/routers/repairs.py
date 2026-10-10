@@ -6,6 +6,13 @@ from app.utils.permissions import check_permission
 from bson import ObjectId
 from datetime import datetime, timedelta
 from app.utils.logger import registrar_auditoria
+from app.utils.pagos import (
+    METODOS_VALIDOS,
+    USD,
+    cotizacion_para_cobro,
+    movimiento_vuelto,
+    redondear,
+)
 
 router = APIRouter()
 
@@ -23,7 +30,53 @@ def format_repair(r):
     del r["_id"]
     return r
 
-METODOS_VALIDOS = ("efectivo", "transferencia", "debito", "credito")
+
+
+async def planear_cobro(db, metodo: str, monto: float, saldo: float) -> dict:
+    """Cómo se registra un cobro (seña o saldo) de una reparación.
+    En medios comunes el monto es en pesos. Con "usd" el monto es en dólares:
+    se convierte con la cotización del servidor, lo que supere el saldo se
+    devuelve como vuelto en pesos."""
+    if metodo != USD:
+        if monto > saldo + 0.01:
+            raise HTTPException(
+                status_code=400,
+                detail=f"El monto supera el saldo pendiente ($ {saldo:,.2f})".replace(",", "X").replace(".", ",").replace("X", "."),
+            )
+        return {"monto": monto, "monto_caja": monto, "vuelto": 0.0, "extra": {}}
+    cotizacion = await cotizacion_para_cobro(db)
+    usd = redondear(monto)
+    pesos = redondear(usd * cotizacion)
+    cubierto = min(pesos, saldo)
+    vuelto = redondear(pesos - cubierto) if pesos > saldo + 0.01 else 0.0
+    return {
+        "monto": redondear(cubierto),
+        "monto_caja": pesos,
+        "vuelto": vuelto,
+        "extra": {"usd": usd, "cotizacion": cotizacion, "vuelto": vuelto},
+    }
+
+
+def movimientos_de_cobro(plan: dict, metodo: str, numero: str, repair_id: str, nota: str, usuario_id: str) -> list:
+    """Movimientos de caja de un cobro: el ingreso y, si hubo, el vuelto."""
+    ingreso = {
+        "tipo": "ingreso",
+        "monto": plan["monto_caja"],
+        "motivo": f"Reparación {numero} — {metodo}",
+        "metodo_pago": metodo,
+        "concepto": "reparacion",
+        "referencia_id": repair_id,
+        "notas": nota,
+        "usuario_id": usuario_id,
+        "fecha": datetime.utcnow(),
+    }
+    if metodo == USD:
+        ingreso["monto_usd"] = plan["extra"]["usd"]
+        ingreso["cotizacion"] = plan["extra"]["cotizacion"]
+    movimientos = [ingreso]
+    if plan["vuelto"] > 0:
+        movimientos.append(movimiento_vuelto(plan["vuelto"], f"reparación {numero}", repair_id, usuario_id))
+    return movimientos
 
 
 def validar_bloqueo(equipo: dict) -> dict:
@@ -113,21 +166,23 @@ async def create_repair(repair: RepairCreate, current_user: dict = Depends(get_c
             raise HTTPException(status_code=400, detail="Medio de pago inválido")
         if sena["monto"] <= 0:
             raise HTTPException(status_code=400, detail="La seña debe ser mayor a 0")
-        if sena["monto"] > precio_total:
+        if sena["metodo"] != USD and sena["monto"] > precio_total:
             raise HTTPException(status_code=400, detail="La seña no puede superar el total de la reparación")
         caja = await caja_abierta_del_usuario(db, current_user)
         if not caja:
             raise HTTPException(status_code=400, detail="Debe haber una caja abierta para cobrar la seña")
+        plan_sena = await planear_cobro(db, sena["metodo"], sena["monto"], precio_total)
 
     numero = await get_next_number(db)
     pagos = []
     total_pagado = 0
     if sena:
-        total_pagado = sena["monto"]
+        total_pagado = plan_sena["monto"]
         pagos.append({
-            "monto": sena["monto"],
-            "tipo": "total" if sena["monto"] >= precio_total else "seña",
+            "monto": plan_sena["monto"],
+            "tipo": "total" if plan_sena["monto"] >= precio_total else "seña",
             "metodo": sena["metodo"],
+            **plan_sena["extra"],
             "usuario_id": current_user["user_id"],
             "fecha": datetime.utcnow(),
         })
@@ -151,17 +206,10 @@ async def create_repair(repair: RepairCreate, current_user: dict = Depends(get_c
     if sena:
         await db.cajas.update_one(
             {"_id": caja["_id"]},
-            {"$push": {"movimientos": {
-                "tipo": "ingreso",
-                "monto": sena["monto"],
-                "motivo": f"Reparación {numero} — {sena['metodo']}",
-                "metodo_pago": sena["metodo"],
-                "concepto": "reparacion",
-                "referencia_id": str(result.inserted_id),
-                "notas": f"Seña de reparación {numero}",
-                "usuario_id": current_user["user_id"],
-                "fecha": datetime.utcnow(),
-            }}},
+            {"$push": {"movimientos": {"$each": movimientos_de_cobro(
+                plan_sena, sena["metodo"], numero, str(result.inserted_id),
+                f"Seña de reparación {numero}", current_user["user_id"],
+            )}}},
         )
 
     await registrar_auditoria(
@@ -242,18 +290,17 @@ async def add_payment(repair_id: str, pago: Pago, current_user: dict = Depends(g
     if pago.monto <= 0:
         raise HTTPException(status_code=400, detail="El monto debe ser mayor a 0")
     saldo_actual = repair.get("precio_total", 0) - repair.get("total_pagado", 0)
-    if pago.monto > saldo_actual + 0.01:
-        raise HTTPException(
-            status_code=400,
-            detail=f"El monto supera el saldo pendiente ($ {saldo_actual:,.2f})".replace(",", "X").replace(".", ",").replace("X", "."),
-        )
+    plan = await planear_cobro(db, pago.metodo, pago.monto, saldo_actual)
 
     nuevo_pago = {
-        **pago.dict(),
+        "monto": plan["monto"],
+        "tipo": pago.tipo,
+        "metodo": pago.metodo,
+        **plan["extra"],
         "usuario_id": current_user["user_id"],
         "fecha": datetime.utcnow()
     }
-    total_pagado = repair.get("total_pagado", 0) + pago.monto
+    total_pagado = repair.get("total_pagado", 0) + plan["monto"]
     saldo = repair.get("precio_total", 0) - total_pagado
 
     await db.reparaciones.update_one(
@@ -267,24 +314,16 @@ async def add_payment(repair_id: str, pago: Pago, current_user: dict = Depends(g
         }
     )
 
-    # Registrar en caja como movimiento
-    movimiento_caja = {
-        "tipo": "ingreso",
-        "monto": pago.monto,
-        "motivo": f"Reparación {repair.get('numero_orden', '')} — {pago.metodo}",
-        "metodo_pago": pago.metodo,
-        "concepto": "reparacion",
-        "referencia_id": repair_id,
-        "notas": f"Cobro de reparación {repair.get('numero_orden', '')}",
-        "usuario_id": current_user["user_id"],
-        "fecha": datetime.utcnow()
-    }
+    # Registrar en caja (ingreso y, si hubo vuelto en pesos, su egreso)
     await db.cajas.update_one(
         {"_id": caja["_id"]},
-        {"$push": {"movimientos": movimiento_caja}}
+        {"$push": {"movimientos": {"$each": movimientos_de_cobro(
+            plan, pago.metodo, repair.get("numero_orden", ""), repair_id,
+            f"Cobro de reparación {repair.get('numero_orden', '')}", current_user["user_id"],
+        )}}},
     )
 
-    return {"message": "Pago registrado", "total_pagado": total_pagado, "saldo_pendiente": saldo}
+    return {"message": "Pago registrado", "total_pagado": total_pagado, "saldo_pendiente": saldo, "vuelto": plan["vuelto"]}
 
 @router.get("/cliente/{cliente_id}")
 async def get_repairs_by_client(cliente_id: str, current_user: dict = Depends(get_current_user)):
@@ -321,9 +360,15 @@ async def cancel_repair(repair_id: str, current_user: dict = Depends(get_current
             )
         egresos = []
         for p in pagos:
-            egresos.append({
+            # Se devuelve por el mismo medio con el que se cobró. Lo cobrado en
+            # dólares se descuenta del esperado en dólares; si hubo vuelto en
+            # pesos, se revierte.
+            monto_egreso = p["monto"]
+            if p["metodo"] == USD and p.get("usd") is not None:
+                monto_egreso = redondear(p["usd"] * p["cotizacion"])
+            egreso = {
                 "tipo": "egreso",
-                "monto": p["monto"],
+                "monto": monto_egreso,
                 "motivo": f"Devolución orden {repair.get('numero_orden', '')} — {p['metodo']}",
                 "metodo_pago": p["metodo"],
                 "concepto": "devolucion_reparacion",
@@ -331,7 +376,22 @@ async def cancel_repair(repair_id: str, current_user: dict = Depends(get_current
                 "notas": f"Cancelación de la orden {repair.get('numero_orden', '')}",
                 "usuario_id": current_user["user_id"],
                 "fecha": datetime.utcnow(),
-            })
+            }
+            if p["metodo"] == USD and p.get("usd") is not None:
+                egreso["monto_usd"] = p["usd"]
+            egresos.append(egreso)
+            if p.get("vuelto", 0) > 0:
+                egresos.append({
+                    "tipo": "ingreso",
+                    "monto": p["vuelto"],
+                    "motivo": f"Devolución orden {repair.get('numero_orden', '')} — vuelto devuelto",
+                    "metodo_pago": "efectivo",
+                    "concepto": "devolucion_reparacion",
+                    "referencia_id": repair_id,
+                    "notas": f"Se revierte el vuelto en pesos de la orden {repair.get('numero_orden', '')}",
+                    "usuario_id": current_user["user_id"],
+                    "fecha": datetime.utcnow(),
+                })
             total_devuelto += p["monto"]
         await db.cajas.update_one({"_id": caja["_id"]}, {"$push": {"movimientos": {"$each": egresos}}})
 

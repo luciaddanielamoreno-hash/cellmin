@@ -6,6 +6,14 @@ from app.utils.permissions import check_permission
 from bson import ObjectId
 from datetime import datetime
 from app.utils.logger import registrar_auditoria
+from app.utils.pagos import (
+    METODOS_VALIDOS,
+    USD,
+    cotizacion_para_cobro,
+    formato_usd,
+    movimiento_vuelto,
+    pagos_de_venta,
+)
 
 router = APIRouter()
 
@@ -36,7 +44,6 @@ async def get_sale(sale_id: str, current_user: dict = Depends(get_current_user))
         raise HTTPException(status_code=404, detail="Venta no encontrada")
     return {**sale, "_id": str(sale["_id"])}
 
-METODOS_VALIDOS = ("efectivo", "transferencia", "debito", "credito")
 TIPOS_AJUSTE = ("ninguno", "descuento", "interes")
 
 
@@ -137,25 +144,79 @@ async def create_sale(sale: SaleCreate, current_user: dict = Depends(get_current
         )
 
     # 4. Validar el pago y armar el texto del medio de pago
+    #    Con medio "usd" el monto del pago es en dólares: se convierte a pesos
+    #    con la cotización del servidor y la diferencia con el total es el
+    #    vuelto, que se entrega en pesos.
+    vuelto = 0.0
+    cotizacion = None
+    caja_cobro = None
     if sale.pagos:
         for p in sale.pagos:
             if p.metodo not in METODOS_VALIDOS:
                 raise HTTPException(status_code=400, detail=f"Medio de pago inválido: {p.metodo}")
-        if len(sale.pagos) > 1:
-            if any(p.monto <= 0 for p in sale.pagos):
-                raise HTTPException(status_code=400, detail="Cada medio de pago debe tener un monto mayor a 0")
-            pagado = redondear(sum(p.monto for p in sale.pagos))
-            if abs(pagado - total) > 0.01:
+        usa_usd = any(p.metodo == USD for p in sale.pagos)
+        if usa_usd:
+            cotizacion = await cotizacion_para_cobro(db)
+            caja_cobro = await db.cajas.find_one({"estado": "abierta", "sucursal": sale.sucursal})
+            if not caja_cobro:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"El total pagado ({formato_monto(pagado)}) no coincide con el total ({formato_monto(total)})",
+                    detail="Para cobrar en dólares hace falta una caja abierta, donde se registran los billetes recibidos.",
                 )
-            metodo_pago = " + ".join(f"{p.metodo}: {formato_monto(p.monto)}" for p in sale.pagos)
-            pagos_venta = [{"metodo": p.metodo, "monto": redondear(p.monto)} for p in sale.pagos]
-        else:
+
+        if len(sale.pagos) == 1 and not usa_usd:
             metodo_pago = sale.pagos[0].metodo
             pagos_venta = [{"metodo": metodo_pago, "monto": total}]
+        else:
+            if any(p.monto <= 0 for p in sale.pagos):
+                raise HTTPException(status_code=400, detail="Cada medio de pago debe tener un monto mayor a 0")
+            pagos_venta = []
+            for p in sale.pagos:
+                if p.metodo == USD:
+                    usd = redondear(p.monto)
+                    pagos_venta.append({
+                        "metodo": USD,
+                        "monto": redondear(usd * cotizacion),
+                        "usd": usd,
+                        "cotizacion": cotizacion,
+                    })
+                else:
+                    pagos_venta.append({"metodo": p.metodo, "monto": redondear(p.monto)})
+            pagado = redondear(sum(p["monto"] for p in pagos_venta))
+
+            if not usa_usd:
+                if abs(pagado - total) > 0.01:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"El total pagado ({formato_monto(pagado)}) no coincide con el total ({formato_monto(total)})",
+                    )
+            else:
+                if pagado < total - 0.01:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Lo recibido ({formato_monto(pagado)}) no alcanza para cubrir el total ({formato_monto(total)})",
+                    )
+                if pagado > total + 0.01:
+                    vuelto = redondear(pagado - total)
+                    en_efectivo = sum(p["monto"] for p in pagos_venta if p["metodo"] in ("efectivo", USD))
+                    if vuelto > en_efectivo + 0.01:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="El vuelto solo puede salir de lo cobrado en efectivo o en dólares, no de tarjeta ni transferencia.",
+                        )
+
+            def texto_pago(p):
+                if p["metodo"] == USD:
+                    return f"usd: {formato_usd(p['usd'])}"
+                return f"{p['metodo']}: {formato_monto(p['monto'])}"
+
+            if len(pagos_venta) > 1:
+                metodo_pago = " + ".join(texto_pago(p) for p in pagos_venta)
+            else:
+                metodo_pago = USD
     else:
+        if sale.metodo_pago == USD:
+            raise HTTPException(status_code=400, detail="Indicá cuántos dólares se recibieron")
         if sale.metodo_pago not in METODOS_VALIDOS:
             raise HTTPException(status_code=400, detail="Medio de pago inválido")
         metodo_pago = sale.metodo_pago
@@ -174,6 +235,8 @@ async def create_sale(sale: SaleCreate, current_user: dict = Depends(get_current
         "total": total,
         "metodo_pago": metodo_pago,
         "pagos": pagos_venta,
+        "vuelto": vuelto,
+        "cotizacion_usd": cotizacion,
         "sucursal": sale.sucursal,
         "notas": sale.notas,
         "numero_venta": numero,
@@ -182,6 +245,15 @@ async def create_sale(sale: SaleCreate, current_user: dict = Depends(get_current
         "fecha": datetime.utcnow(),
     }
     result = await db.ventas.insert_one(new_sale)
+
+    # Vuelto en pesos entregado al cobrar en dólares: sale de la caja
+    if vuelto > 0 and caja_cobro:
+        await db.cajas.update_one(
+            {"_id": caja_cobro["_id"]},
+            {"$push": {"movimientos": movimiento_vuelto(
+                vuelto, f"venta {numero}", str(result.inserted_id), current_user["user_id"]
+            )}},
+        )
 
     # 6. Descontar stock y registrar movimientos
     for item in items_finales:
@@ -216,28 +288,7 @@ async def create_sale(sale: SaleCreate, current_user: dict = Depends(get_current
         descripcion=f"Venta registrada: {numero}",
     )
 
-    return {"message": "Venta registrada", "numero_venta": numero, "id": str(result.inserted_id), "total": total}
-
-
-def pagos_de_venta(venta: dict) -> list:
-    """Cómo se pagó la venta, por método. Las ventas nuevas guardan 'pagos';
-    en las viejas se reconstruye desde el texto de metodo_pago."""
-    if venta.get("pagos"):
-        return venta["pagos"]
-    texto = venta.get("metodo_pago", "efectivo")
-    if "+" not in texto:
-        return [{"metodo": texto, "monto": venta["total"]}]
-    pagos = []
-    for parte in texto.split("+"):
-        if ":" not in parte:
-            continue
-        metodo, monto_txt = parte.split(":", 1)
-        try:
-            monto = float(monto_txt.replace("$", "").replace(".", "").replace(",", ".").strip())
-        except ValueError:
-            continue
-        pagos.append({"metodo": metodo.strip(), "monto": monto})
-    return pagos
+    return {"message": "Venta registrada", "numero_venta": numero, "id": str(result.inserted_id), "total": total, "vuelto": vuelto}
 
 
 @router.put("/{sale_id}/cancel")
@@ -309,12 +360,14 @@ async def cancel_sale(sale_id: str, current_user: dict = Depends(get_current_use
                 {"$inc": {"stock_actual": item["cantidad"]}},
             )
 
-    # Devolver el dinero: un egreso por cada medio con el que se cobró
+    # Devolver el dinero por el mismo medio con el que se cobró: lo cobrado
+    # en dólares se descuenta del esperado en dólares. Si hubo vuelto en
+    # pesos, se revierte (el cliente lo devuelve junto con los dólares).
     egresos = []
     for p in pagos_de_venta(sale):
         if p["monto"] <= 0:
             continue
-        egresos.append({
+        egreso = {
             "tipo": "egreso",
             "monto": p["monto"],
             "motivo": f"Cancelación venta {numero} — {p['metodo']}",
@@ -322,6 +375,22 @@ async def cancel_sale(sale_id: str, current_user: dict = Depends(get_current_use
             "concepto": "cancelacion_venta",
             "referencia_id": sale_id,
             "notas": f"Cancelación de la venta {numero}",
+            "usuario_id": current_user["user_id"],
+            "fecha": datetime.utcnow(),
+        }
+        if p["metodo"] == USD:
+            egreso["monto_usd"] = p.get("usd")
+        egresos.append(egreso)
+    vuelto_entregado = sale.get("vuelto", 0) or 0
+    if vuelto_entregado > 0:
+        egresos.append({
+            "tipo": "ingreso",
+            "monto": vuelto_entregado,
+            "motivo": f"Cancelación venta {numero} — vuelto devuelto",
+            "metodo_pago": "efectivo",
+            "concepto": "cancelacion_venta",
+            "referencia_id": sale_id,
+            "notas": f"Se revierte el vuelto en pesos de la venta {numero}",
             "usuario_id": current_user["user_id"],
             "fecha": datetime.utcnow(),
         })
@@ -335,7 +404,7 @@ async def cancel_sale(sale_id: str, current_user: dict = Depends(get_current_use
         rol=current_user["role"],
         accion="cancelar",
         modulo="ventas",
-        descripcion=f"Venta cancelada: {numero}. Devuelto: {sum(e['monto'] for e in egresos)}",
+        descripcion=f"Venta cancelada: {numero}. Devuelto: {sale['total']}",
     )
 
-    return {"message": "Venta cancelada", "numero_venta": numero, "total_devuelto": sum(e["monto"] for e in egresos)}
+    return {"message": "Venta cancelada", "numero_venta": numero, "total_devuelto": sale["total"]}

@@ -6,8 +6,50 @@ from app.utils.permissions import check_permission
 from bson import ObjectId
 from datetime import datetime
 from app.utils.logger import registrar_auditoria
+from app.utils.pagos import USD, cotizacion_para_cobro, pagos_de_venta, redondear
 
 router = APIRouter()
+
+
+def calcular_esperado(caja: dict, ventas: list) -> dict:
+    """Lo que debería haber en la caja por medio de pago, en pesos.
+    Los dólares se cuentan en pesos al valor con que se cobraron, y además
+    se lleva la cantidad de dólares (billetes) que debería haber."""
+    ventas_por_metodo = {}
+    usd_cobrados = 0.0
+    excedente = 0.0  # dólares cobrados de más en ventas (se devuelve como vuelto)
+    for v in ventas:
+        excedente += v.get("vuelto", 0) or 0
+        for p in pagos_de_venta(v):
+            ventas_por_metodo[p["metodo"]] = ventas_por_metodo.get(p["metodo"], 0) + p["monto"]
+            usd_cobrados += p.get("usd", 0) or 0
+
+    movimientos_por_metodo = {}
+    for m in caja.get("movimientos", []):
+        metodo = m.get("metodo_pago", "efectivo")
+        monto = m.get("monto", 0)
+        if m.get("tipo") == "ingreso":
+            movimientos_por_metodo[metodo] = movimientos_por_metodo.get(metodo, 0) + monto
+            usd_cobrados += m.get("monto_usd", 0) or 0
+        else:
+            movimientos_por_metodo[metodo] = movimientos_por_metodo.get(metodo, 0) - monto
+            usd_cobrados -= m.get("monto_usd", 0) or 0
+
+    metodos = set(ventas_por_metodo) | set(movimientos_por_metodo) | {"efectivo"}
+    esperado = {}
+    for metodo in metodos:
+        base = caja["monto_inicial"] if metodo == "efectivo" else 0
+        esperado[metodo] = redondear(
+            base + ventas_por_metodo.get(metodo, 0) + movimientos_por_metodo.get(metodo, 0)
+        )
+    return {
+        "ventas_por_metodo": ventas_por_metodo,
+        "esperado_por_metodo": esperado,
+        "esperado_total": redondear(sum(esperado.values())),
+        "esperado_usd": redondear(usd_cobrados),
+        "excedente_ventas": redondear(excedente),
+    }
+
 
 @router.get("/actual")
 async def get_current_cash(current_user: dict = Depends(get_current_user)):
@@ -38,6 +80,7 @@ async def get_current_cash(current_user: dict = Depends(get_current_user)):
             + (" (cancelada)" if v.get("estado") == "cancelada" else ""),
             "metodo_pago": v.get("metodo_pago", ""),
             "monto": v["total"],
+            "monto_usd": sum((pg.get("usd") or 0) for pg in pagos_de_venta(v)) or None,
             "fecha": v["fecha"]
         })
 
@@ -55,14 +98,20 @@ async def get_current_cash(current_user: dict = Depends(get_current_user)):
             "descripcion": descripcion,
             "metodo_pago": m.get("metodo_pago", ""),
             "monto": m["monto"],
+            "monto_usd": m.get("monto_usd"),
             "fecha": m["fecha"]
         })
 
     # Ordenar por fecha
     movimientos_completos.sort(key=lambda x: x["fecha"])
 
+    esperado = calcular_esperado(caja, ventas)
     caja["id"] = str(caja["_id"])
     caja["total_ventas_hoy"] = total_ventas_hoy
+    caja["esperado_por_metodo"] = esperado["esperado_por_metodo"]
+    caja["esperado_total"] = esperado["esperado_total"]
+    caja["esperado_usd"] = esperado["esperado_usd"]
+    caja["excedente_ventas"] = esperado["excedente_ventas"]
     caja["movimientos_completos"] = movimientos_completos
     del caja["_id"]
     return caja
@@ -174,45 +223,28 @@ async def close_cash(data: CashClose, current_user: dict = Depends(get_current_u
 
     total_ventas = sum(v["total"] for v in ventas)
 
-    ventas_por_metodo = {}
-    for v in ventas:
-        metodo = v.get("metodo_pago", "efectivo")
-        if "+" not in metodo:
-            ventas_por_metodo[metodo] = ventas_por_metodo.get(metodo, 0) + v["total"]
-        else:
-            partes = metodo.split("+")
-            for parte in partes:
-                parte = parte.strip()
-                if ":" in parte:
-                    met, monto_str = parte.split(":")
-                    met = met.strip()
-                    try:
-                        monto_val = float(monto_str.replace("$", "").replace(".", "").replace(",", ".").strip())
-                        ventas_por_metodo[met] = ventas_por_metodo.get(met, 0) + monto_val
-                    except:
-                        pass
+    calculo = calcular_esperado(caja, ventas)
+    ventas_por_metodo = calculo["ventas_por_metodo"]
+    esperado_por_metodo = calculo["esperado_por_metodo"]
+    esperado_usd = calculo["esperado_usd"]
 
-    movimientos_por_metodo = {}
-    for m in caja.get("movimientos", []):
-        metodo = m.get("metodo_pago", "efectivo")
-        monto = m.get("monto", 0)
-        if m.get("tipo") == "ingreso":
-            movimientos_por_metodo[metodo] = movimientos_por_metodo.get(metodo, 0) + monto
-        else:
-            movimientos_por_metodo[metodo] = movimientos_por_metodo.get(metodo, 0) - monto
+    monto_esperado_total = calculo["esperado_total"]
 
-    todos_metodos = set(list(ventas_por_metodo.keys()) + list(movimientos_por_metodo.keys()) + ['efectivo'])
-    esperado_por_metodo = {}
-    for metodo in todos_metodos:
-        base = caja["monto_inicial"] if metodo == "efectivo" else 0
-        esperado_por_metodo[metodo] = (
-            base +
-            ventas_por_metodo.get(metodo, 0) +
-            movimientos_por_metodo.get(metodo, 0)
-        )
-
-    monto_esperado_total = sum(esperado_por_metodo.values())
-    monto_real_total = sum(m.monto for m in data.montos_por_metodo)
+    # Los dólares se cuentan en billetes (USD). Para compararlos con lo
+    # esperado en pesos se valúan al promedio con que se cobraron.
+    usd_contado = round(sum(m.monto for m in data.montos_por_metodo if m.metodo == USD), 2)
+    pesos_esperados_usd = esperado_por_metodo.get(USD, 0)
+    if esperado_usd > 0:
+        tasa_usd = pesos_esperados_usd / esperado_usd
+    else:
+        tasa_usd = 0.0
+        if usd_contado > 0:
+            tasa_usd = await cotizacion_para_cobro(db)
+    montos_reales = {}
+    for m in data.montos_por_metodo:
+        montos_reales[m.metodo] = redondear(m.monto * tasa_usd) if m.metodo == USD else m.monto
+    diferencia_usd = round(usd_contado - esperado_usd, 2)
+    monto_real_total = sum(montos_reales.values())
 
     # Efectivo que se deja en caja para mañana; el resto del efectivo se retira
     efectivo_contado = sum(m.monto for m in data.montos_por_metodo if m.metodo == "efectivo")
@@ -228,9 +260,8 @@ async def close_cash(data: CashClose, current_user: dict = Depends(get_current_u
     diferencia_total = monto_real_total - monto_esperado_total
 
     diferencias_por_metodo = {}
-    for m in data.montos_por_metodo:
-        esperado = esperado_por_metodo.get(m.metodo, 0)
-        diferencias_por_metodo[m.metodo] = m.monto - esperado
+    for metodo, real in montos_reales.items():
+        diferencias_por_metodo[metodo] = redondear(real - esperado_por_metodo.get(metodo, 0))
 
     await db.cajas.update_one(
         {"_id": caja["_id"]},
@@ -242,12 +273,15 @@ async def close_cash(data: CashClose, current_user: dict = Depends(get_current_u
             "total_ventas": total_ventas,
             "ventas_por_metodo": ventas_por_metodo,
             "esperado_por_metodo": esperado_por_metodo,
-            "montos_reales_por_metodo": {m.metodo: m.monto for m in data.montos_por_metodo},
+            "montos_reales_por_metodo": montos_reales,
             "diferencias_por_metodo": diferencias_por_metodo,
             "usuario_cierre_id": current_user["user_id"],
             "fecha_cierre": datetime.utcnow(),
             "monto_dejado": monto_dejado,
             "monto_retirado": monto_retirado,
+            "usd_esperado": esperado_usd,
+            "usd_contado": usd_contado,
+            "usd_diferencia": diferencia_usd,
             "notas_cierre": data.notas
         }}
     )
@@ -270,10 +304,13 @@ async def close_cash(data: CashClose, current_user: dict = Depends(get_current_u
         "monto_esperado": monto_esperado_total,
         "monto_real": monto_real_total,
         "diferencia": diferencia_total,
-        "montos_reales_por_metodo": {m.metodo: m.monto for m in data.montos_por_metodo},
+        "montos_reales_por_metodo": montos_reales,
         "diferencias_por_metodo": diferencias_por_metodo,
         "monto_dejado": monto_dejado,
         "monto_retirado": monto_retirado,
+        "usd_esperado": esperado_usd,
+        "usd_contado": usd_contado,
+        "usd_diferencia": diferencia_usd,
         "monto_inicial": caja["monto_inicial"],
         "monto_esperado_apertura": caja.get("monto_esperado_apertura"),
         "diferencia_apertura": caja.get("diferencia_apertura"),

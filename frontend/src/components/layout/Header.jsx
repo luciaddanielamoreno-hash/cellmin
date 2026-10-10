@@ -24,7 +24,7 @@ export default function Header() {
   };
 
   return (
-    <header className="bg-white border-b border-gray-200 px-4 md:px-6 py-4 flex items-center justify-between">
+    <header className="h-16 shrink-0 bg-white border-b border-gray-200 px-4 md:px-6 flex items-center justify-between">
       <div className="flex items-center gap-2">
         <span className="text-gray-500 text-sm hidden md:block">
           Sistema de Gestión — Cellmin

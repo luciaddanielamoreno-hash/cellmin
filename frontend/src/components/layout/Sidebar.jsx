@@ -114,21 +114,26 @@ export default function Sidebar() {
         />
       )}
 
+      {/* Reserva el ancho del sidebar colapsado: al expandirse con el mouse
+          el menú se superpone al contenido en vez de empujarlo, así la
+          página no se recalcula ni aparecen barras de scroll de golpe. */}
+      <div className="hidden md:block w-16 shrink-0" aria-hidden="true" />
+
       {/* Sidebar */}
       <aside
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         className={`
-          fixed md:static inset-y-0 left-0 z-40
-          bg-gray-900 flex flex-col
-          transition-all duration-300
+          fixed inset-y-0 left-0 z-40
+          bg-gray-900 flex flex-col overflow-hidden
+          transition-[width,transform] duration-300
           ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
           ${expanded ? "md:w-64" : "md:w-16"}
           w-64
         `}
       >
         {/* Logo */}
-        <div className="p-3 border-b border-gray-700 flex items-center justify-between">
+        <div className="h-16 px-3 border-b border-gray-700 flex items-center justify-between shrink-0">
           <button
             onClick={() => handleNavigate("/dashboard")}
             className="flex items-center gap-3 hover:opacity-80 transition"
@@ -141,7 +146,7 @@ export default function Sidebar() {
               />
             </div>
             {(expanded || mobileOpen) && (
-              <div>
+              <div className="whitespace-nowrap text-left">
                 <h1 className="text-white font-bold text-lg leading-none">
                   Cellmin
                 </h1>
@@ -160,7 +165,7 @@ export default function Sidebar() {
         </div>
 
         {/* Menú */}
-        <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-2 space-y-1 overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
@@ -170,7 +175,7 @@ export default function Sidebar() {
                 onClick={() => handleNavigate(item.path)}
                 title={!expanded ? item.label : ""}
                 className={`
-                  w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition
+                  w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition
                   ${!expanded && !mobileOpen ? "justify-center" : ""}
                   ${isActive ? "bg-blue-600 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white"}
                 `}

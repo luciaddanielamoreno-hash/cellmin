@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight } from "lucide-react";
 export default function Paginacion({
   total,
   porPagina,
@@ -47,7 +48,7 @@ export default function Paginacion({
           disabled={paginaActual === 1}
           className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
         >
-          ←
+          <ChevronLeft size={16} />
         </button>
         {paginasFiltradas.map((p, i) =>
           p === "..." ? (
@@ -73,7 +74,7 @@ export default function Paginacion({
           disabled={paginaActual === totalPaginas}
           className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
         >
-          →
+          <ChevronRight size={16} />
         </button>
       </div>
     </div>

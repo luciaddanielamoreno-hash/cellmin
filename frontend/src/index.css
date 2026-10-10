@@ -1,5 +1,26 @@
 @import "tailwindcss";
 
+/* Tipografía del sistema: Inter, pensada para interfaces y cifras legibles */
+@theme {
+  --font-sans:
+    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+html {
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Cifras de ancho fijo: los montos alinean bien en tablas y totales */
+table,
+input,
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
 /* Tablas: el contenido de cada columna queda centrado bajo su título.
    Las filas de detalle expandido (con colspan) conservan su alineación. */
 table th,

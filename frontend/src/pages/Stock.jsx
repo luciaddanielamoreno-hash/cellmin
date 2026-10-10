@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
 import InputNumero from "../components/ui/InputNumero";
 import {
-  Search,
-  ArrowUpCircle,
-  ArrowDownCircle,
   AlertTriangle,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  Check,
   Package,
   Plus,
   RefreshCw,
+  Search,
 } from "lucide-react";
 import { stockService } from "../services/stock.service";
 import { productosService } from "../services/productos.service";
@@ -532,9 +533,15 @@ export default function Stock() {
                                       : "text-green-600"
                                   }`}
                                 >
-                                  {v.stock_actual < v.stock_minimo
-                                    ? "⚠ Stock bajo"
-                                    : "✓ OK"}
+                                  {v.stock_actual < v.stock_minimo ? (
+                    <span className="inline-flex items-center gap-1">
+                      <AlertTriangle size={14} /> Stock bajo
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1">
+                      <Check size={14} /> OK
+                    </span>
+                  )}
                                 </span>
                               </div>
                             </div>
@@ -561,9 +568,15 @@ export default function Stock() {
                                   : "text-green-600"
                               }`}
                             >
-                              {producto.stock_actual < producto.stock_minimo
-                                ? "⚠ Stock bajo"
-                                : "✓ OK"}
+                              {producto.stock_actual < producto.stock_minimo ? (
+                    <span className="inline-flex items-center gap-1">
+                      <AlertTriangle size={14} /> Stock bajo
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1">
+                      <Check size={14} /> OK
+                    </span>
+                  )}
                             </span>
                           </div>
                         </div>

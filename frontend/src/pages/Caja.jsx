@@ -1,15 +1,16 @@
 import { useState, useEffect } from "react";
 import InputNumero from "../components/ui/InputNumero";
 import {
-  DollarSign,
-  Plus,
-  Minus,
-  X,
+  Check,
   ChevronDown,
   ChevronUp,
+  DollarSign,
   Lock,
-  Unlock,
+  Minus,
+  Plus,
   Search,
+  Unlock,
+  X,
 } from "lucide-react";
 import { cajaService } from "../services/caja.service";
 import toast from "react-hot-toast";
@@ -486,9 +487,11 @@ function CerrarCajaModal({ caja, onClose, onSave }) {
                             : "text-red-600"
                       }`}
                     >
-                      {Math.abs(dif) < 0.01
-                        ? "✓ OK"
-                        : dif > 0
+                      {Math.abs(dif) < 0.01 ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Check size={14} /> OK
+                        </span>
+                      ) : dif > 0
                           ? `+${fmt(dif)}`
                           : `-${fmt(-dif)}`}
                     </div>
@@ -1117,8 +1120,8 @@ export default function Caja() {
                         {formatCurrency(Math.abs(caja.diferencia_apertura))}
                       </p>
                     ) : (
-                      <p className="text-xs mt-1 text-green-600">
-                        ✓ Coincide con lo dejado en el cierre anterior
+                      <p className="text-xs mt-1 text-green-600 flex items-center gap-1">
+                        <Check size={14} /> Coincide con lo dejado en el cierre anterior
                       </p>
                     ))}
                 </div>

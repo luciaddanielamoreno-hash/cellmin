@@ -3,21 +3,22 @@ import InputNumero from "../components/ui/InputNumero";
 import { useCotizacion } from "../hooks/useCotizacion";
 import { useState, useEffect } from "react";
 import {
-  Plus,
-  Search,
-  Wrench,
-  ChevronDown,
-  ChevronUp,
-  Filter,
-  X,
-  Edit,
-  Trash2,
-  ToggleLeft,
-  ExternalLink,
-  Printer,
-  PenLine,
   ArrowRight,
   Ban,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Edit,
+  ExternalLink,
+  Filter,
+  PenLine,
+  Plus,
+  Printer,
+  Search,
+  ToggleLeft,
+  Trash2,
+  Wrench,
+  X,
 } from "lucide-react";
 import { reparacionesService } from "../services/reparaciones.service";
 import { clientesService } from "../services/clientes.service";
@@ -228,7 +229,7 @@ function SelectorTipos({ tiposDisponibles, tiposSeleccionados, onToggle }) {
                     }`}
                   >
                     {seleccionado && (
-                      <span className="text-white text-xs">✓</span>
+                      <Check size={12} className="text-white" strokeWidth={3} />
                     )}
                   </div>
                   <div>
@@ -1161,12 +1162,16 @@ function PagoModal({ reparacion, onClose, onSave }) {
                     : "bg-red-50 text-red-700"
               }`}
             >
-              <span>
-                {!mixtoInvalido
-                  ? "✓ Monto correcto"
-                  : diferencia > 0
-                    ? "Excede el saldo"
-                    : "Falta completar"}
+              <span className="inline-flex items-center gap-1">
+                {!mixtoInvalido ? (
+                  <>
+                    <Check size={14} /> Monto correcto
+                  </>
+                ) : diferencia > 0 ? (
+                  "Excede el saldo"
+                ) : (
+                  "Falta completar"
+                )}
               </span>
               {mixtoInvalido && (
                 <span className="font-bold">
@@ -1376,7 +1381,9 @@ function FilaReparacion({
               {formatCurrency(reparacion.saldo_pendiente)}
             </span>
           ) : reparacion.precio_total > 0 ? (
-            <span className="text-green-600 text-xs font-medium">✓ Pagado</span>
+            <span className="inline-flex items-center gap-1 text-green-600 text-xs font-medium">
+              <Check size={14} /> Pagado
+            </span>
           ) : (
             "-"
           )}

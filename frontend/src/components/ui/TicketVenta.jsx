@@ -1,3 +1,4 @@
+import { Printer } from "lucide-react";
 import { formatCurrency, formatDateTime, describirPago } from "../../utils/helpers";
 
 const SUCURSALES = {
@@ -156,9 +157,9 @@ export default function TicketVenta({ venta, cliente }) {
 
       <button
         onClick={handlePrint}
-        className="w-full py-2 bg-gray-800 text-white rounded-xl text-sm hover:bg-gray-900 transition"
+        className="w-full py-2 bg-gray-800 text-white rounded-xl text-sm hover:bg-gray-900 transition flex items-center justify-center gap-2"
       >
-        🖨️ Imprimir ticket
+        <Printer size={16} /> Imprimir ticket
       </button>
     </div>
   );

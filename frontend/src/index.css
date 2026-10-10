@@ -1,1 +1,11 @@
 @import "tailwindcss";
+
+/* Tablas: el contenido de cada columna queda centrado bajo su título.
+   Las filas de detalle expandido (con colspan) conservan su alineación. */
+table th,
+table td:not([colspan]) {
+  text-align: center;
+}
+table td:not([colspan]) > .flex:not(.flex-col) {
+  justify-content: center;
+}

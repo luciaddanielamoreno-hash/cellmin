@@ -68,6 +68,7 @@ export const METODOS_PAGO = [
   { value: "transferencia", label: "Transferencia" },
   { value: "debito", label: "Débito" },
   { value: "credito", label: "Crédito" },
+  { value: "usd", label: "Dólares (US$)" },
 ];
 
 export const SUCURSALES = [
@@ -115,3 +116,33 @@ export const parsearMetodoPago = (texto) => {
   });
   return { esMixto: partes.length > 1, partes };
 };
+
+
+// Cómo se pagó una venta, para mostrar en pantalla y en el ticket.
+// Las ventas con dólares guardan los US$ recibidos y el vuelto en pesos.
+export const describirPago = (venta) => {
+  const etiqueta = (valor) =>
+    METODOS_PAGO.find((m) => m.value === valor)?.label || valor;
+  const hayUSD = (venta.pagos || []).some((p) => p.metodo === "usd");
+  if (!hayUSD) {
+    return { texto: venta.metodo_pago, partes: null, vuelto: 0 };
+  }
+  const partes = venta.pagos.map((p) => ({
+    metodo: etiqueta(p.metodo),
+    monto:
+      p.metodo === "usd"
+        ? `${formatUSD(p.usd)} (= ${formatCurrency(p.monto)})`
+        : formatCurrency(p.monto),
+  }));
+  return {
+    texto: partes.map((p) => `${p.metodo}: ${p.monto}`).join(" + "),
+    partes,
+    vuelto: venta.vuelto || 0,
+  };
+};
+
+// Medio de pago de un cobro de reparación; si fue en dólares, cuántos
+export const etiquetaPago = (pago) =>
+  pago.metodo === "usd" && pago.usd != null
+    ? `Dólares (${formatUSD(pago.usd)})`
+    : pago.metodo;

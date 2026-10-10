@@ -2,6 +2,7 @@ import {
   formatCurrency,
   formatDateTime,
   parsearMetodoPago,
+  describirPago,
   SUCURSALES,
 } from "../../utils/helpers";
 
@@ -18,6 +19,7 @@ function Dato({ titulo, valor }) {
 
 export default function DetalleVenta({ venta, cliente }) {
   const pago = parsearMetodoPago(venta.metodo_pago);
+  const pagoUSD = describirPago(venta);
   const sucursal =
     SUCURSALES.find((s) => s.value === venta.sucursal)?.label ||
     venta.sucursal ||
@@ -102,7 +104,7 @@ export default function DetalleVenta({ venta, cliente }) {
           <p className="text-sm font-medium text-gray-700">
             Método de pago {pago.esMixto && "(mixto)"}
           </p>
-          {pago.partes.map((p, i) => (
+          {(pagoUSD.partes || pago.partes).map((p, i) => (
             <div key={i} className="flex justify-between text-sm">
               <span className="text-gray-600">{p.metodo}</span>
               {p.monto && (
@@ -110,6 +112,14 @@ export default function DetalleVenta({ venta, cliente }) {
               )}
             </div>
           ))}
+          {pagoUSD.vuelto > 0 && (
+            <div className="flex justify-between text-sm border-t border-gray-200 pt-2">
+              <span className="text-gray-600">Vuelto entregado (en pesos)</span>
+              <span className="font-medium text-gray-800">
+                {formatCurrency(pagoUSD.vuelto)}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="bg-gray-50 rounded-xl p-4 space-y-2">

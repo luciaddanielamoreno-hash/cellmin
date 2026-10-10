@@ -2,6 +2,7 @@ import PatronBloqueo from "./PatronBloqueo";
 import {
   ESTADOS_REP,
   formatCurrency,
+  etiquetaPago,
   formatDateTime,
   SUCURSALES,
 } from "../../utils/helpers";
@@ -136,7 +137,7 @@ export default function DetalleReparacion({ reparacion, cliente }) {
                 className="flex justify-between text-sm text-gray-600 py-1 border-b border-gray-100"
               >
                 <span className="capitalize">
-                  {p.tipo} — {p.metodo} — {formatDateTime(p.fecha)}
+                  {p.tipo} — {etiquetaPago(p)} — {formatDateTime(p.fecha)}
                 </span>
                 <span className="font-medium">{formatCurrency(p.monto)}</span>
               </div>

@@ -1,4 +1,4 @@
-import { formatCurrency, formatDateTime } from "../../utils/helpers";
+import { formatCurrency, formatDateTime, describirPago } from "../../utils/helpers";
 
 const SUCURSALES = {
   sucursal_1: {
@@ -83,8 +83,13 @@ export default function TicketVenta({ venta, cliente }) {
         </div>
         <div class="row">
           <span>Método de pago:</span>
-          <span>${venta.metodo_pago}</span>
+          <span>${describirPago(venta).texto}</span>
         </div>
+        ${
+          describirPago(venta).vuelto > 0
+            ? `<div class="row"><span>Vuelto (en pesos):</span><span>${formatCurrency(describirPago(venta).vuelto)}</span></div>`
+            : ""
+        }
       </div>
       <div class="divider"></div>
       <div class="section center small">
@@ -139,8 +144,14 @@ export default function TicketVenta({ venta, cliente }) {
         </div>
         <div className="flex justify-between text-sm text-gray-600">
           <span>Método de pago</span>
-          <span>{venta.metodo_pago}</span>
+          <span>{describirPago(venta).texto}</span>
         </div>
+        {describirPago(venta).vuelto > 0 && (
+          <div className="flex justify-between text-sm text-gray-600">
+            <span>Vuelto (en pesos)</span>
+            <span>{formatCurrency(describirPago(venta).vuelto)}</span>
+          </div>
+        )}
       </div>
 
       <button

@@ -1,5 +1,6 @@
 import { tiposReparacionService } from "../services/tiposReparacion.service";
 import InputNumero from "../components/ui/InputNumero";
+import { useCotizacion } from "../hooks/useCotizacion";
 import { useState, useEffect } from "react";
 import {
   Plus,
@@ -26,6 +27,7 @@ import {
   formatCurrency,
   formatDateTime,
   METODOS_PAGO,
+  etiquetaPago,
   ESTADOS_REP,
 } from "../utils/helpers";
 import { cajaService } from "../services/caja.service";
@@ -306,6 +308,7 @@ function NuevaReparacionModal({ onClose, onSave, cajaAbierta, userRol }) {
   const [loading, setLoading] = useState(false);
   const [cobrarSena, setCobrarSena] = useState(false);
   const [sena, setSena] = useState({ monto: "", metodo: "efectivo" });
+  const cotizacion = useCotizacion();
 
   useEffect(() => {
     Promise.all([
@@ -345,8 +348,21 @@ function NuevaReparacionModal({ onClose, onSave, cajaAbierta, userRol }) {
   const senaDisponible =
     tiposSeleccionados.length > 0 && userRol !== "tecnico" && cajaAbierta;
   const senaActiva = cobrarSena && senaDisponible;
-  const montoSena = parseFloat(sena.monto) || 0;
+  // Con medio "dólares" el monto de la seña es en US$: se convierte a pesos
+  // con el dólar blue; lo que supere el total se devuelve en pesos.
+  const senaEsUSD = sena.metodo === "usd";
+  const montoIngresado = parseFloat(sena.monto) || 0;
+  const senaEnPesos = senaEsUSD
+    ? (cotizacion.aPesos(montoIngresado) ?? 0)
+    : montoIngresado;
+  const montoSena = senaEsUSD ? Math.min(senaEnPesos, precioTotal) : senaEnPesos;
+  const vueltoSena =
+    senaEsUSD && senaEnPesos > precioTotal + 0.01 ? senaEnPesos - precioTotal : 0;
   const saldoRestante = precioTotal - montoSena;
+  const desdePesos = (metodo, pesos) =>
+    metodo === "usd"
+      ? Math.ceil((cotizacion.aUSD(pesos) ?? 0) * 100 - 1e-9) / 100
+      : Math.round(pesos * 100) / 100;
 
   const handleSubmit = async (e, imprimir = false) => {
     e?.preventDefault();
@@ -368,11 +384,11 @@ function NuevaReparacionModal({ onClose, onSave, cajaAbierta, userRol }) {
       return;
     }
     if (senaActiva) {
-      if (montoSena <= 0) {
+      if (montoIngresado <= 0) {
         toast.error("Ingresá el monto de la seña");
         return;
       }
-      if (montoSena > precioTotal) {
+      if (!senaEsUSD && montoSena > precioTotal) {
         toast.error("La seña no puede superar el total");
         return;
       }
@@ -383,11 +399,13 @@ function NuevaReparacionModal({ onClose, onSave, cajaAbierta, userRol }) {
         ...form,
         tipos_reparacion: tiposSeleccionados,
         estado: estadoFinal,
-        ...(senaActiva ? { sena: { monto: montoSena, metodo: sena.metodo } } : {}),
+        ...(senaActiva ? { sena: { monto: montoIngresado, metodo: sena.metodo } } : {}),
       });
       toast.success(
         senaActiva
-          ? "Orden creada y seña registrada en caja"
+          ? vueltoSena > 0
+            ? `Orden creada y seña registrada. Vuelto: ${formatCurrency(vueltoSena)}`
+            : "Orden creada y seña registrada en caja"
           : "Orden creada correctamente",
       );
       onSave();
@@ -705,13 +723,13 @@ function NuevaReparacionModal({ onClose, onSave, cajaAbierta, userRol }) {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs text-gray-600 mb-1">
-                          Monto de la seña
+                          {senaEsUSD ? "Seña recibida en US$" : "Monto de la seña"}
                         </label>
                         <InputNumero
                           value={sena.monto}
                           onChange={(v) =>
                             setSena({ ...sena, monto: v })}
-                          max={precioTotal}
+                          max={senaEsUSD ? undefined : precioTotal}
                           placeholder="0"
                           className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
@@ -722,12 +740,20 @@ function NuevaReparacionModal({ onClose, onSave, cajaAbierta, userRol }) {
                         </label>
                         <select
                           value={sena.metodo}
-                          onChange={(e) =>
-                            setSena({ ...sena, metodo: e.target.value })
-                          }
+                          onChange={(e) => {
+                            const nuevo = e.target.value;
+                            // al pasar de/hacia dólares se conserva el valor en pesos
+                            const monto =
+                              (nuevo === "usd") !== senaEsUSD && sena.monto !== ""
+                                ? desdePesos(nuevo, senaEnPesos)
+                                : sena.monto;
+                            setSena({ monto, metodo: nuevo });
+                          }}
                           className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
-                          {METODOS_PAGO.map((m) => (
+                          {METODOS_PAGO.filter(
+                            (m) => m.value !== "usd" || cotizacion.disponible,
+                          ).map((m) => (
                             <option key={m.value} value={m.value}>
                               {m.label}
                             </option>
@@ -735,10 +761,28 @@ function NuevaReparacionModal({ onClose, onSave, cajaAbierta, userRol }) {
                         </select>
                       </div>
                     </div>
+                    {senaEsUSD && (
+                      <p className="text-xs text-gray-500">
+                        Equivale a{" "}
+                        <span className="font-medium text-gray-700">
+                          {formatCurrency(senaEnPesos)}
+                        </span>{" "}
+                        (dólar blue {formatCurrency(cotizacion.venta || 0)})
+                        {vueltoSena > 0 && (
+                          <span className="text-green-700">
+                            {" "}
+                            · Vuelto en pesos: {formatCurrency(vueltoSena)}
+                          </span>
+                        )}
+                      </p>
+                    )}
                     <button
                       type="button"
                       onClick={() =>
-                        setSena({ ...sena, monto: String(precioTotal) })
+                        setSena({
+                          ...sena,
+                          monto: desdePesos(sena.metodo, precioTotal),
+                        })
                       }
                       className="text-xs text-blue-600 hover:underline"
                     >
@@ -924,9 +968,22 @@ function EditarTiposModal({ reparacion, tiposDisponibles, onClose, onSave }) {
 
 function PagoModal({ reparacion, onClose, onSave }) {
   const saldo = reparacion.saldo_pendiente || 0;
+  const cotizacion = useCotizacion();
   const [pagoMixto, setPagoMixto] = useState(false);
   const [pagos, setPagos] = useState([{ metodo: "efectivo", monto: saldo }]);
   const [loading, setLoading] = useState(false);
+
+  // Con medio "dólares" el monto es en US$; se compara en pesos con el dólar
+  // blue y lo que supere el saldo se devuelve en pesos.
+  const esUSD = (p) => p.metodo === "usd";
+  const pesosDe = (p) =>
+    esUSD(p)
+      ? (cotizacion.aPesos(parseFloat(p.monto) || 0) ?? 0)
+      : parseFloat(p.monto) || 0;
+  const desdePesos = (metodo, pesos) =>
+    metodo === "usd"
+      ? Math.ceil((cotizacion.aUSD(pesos) ?? 0) * 100 - 1e-9) / 100
+      : Math.round(pesos * 100) / 100;
 
   const togglePagoMixto = (value) => {
     setPagoMixto(value);
@@ -942,47 +999,66 @@ function PagoModal({ reparacion, onClose, onSave }) {
 
   const handlePagoChange = (index, field, value) => {
     const newPagos = [...pagos];
-    newPagos[index] = { ...newPagos[index], [field]: value };
+    const anterior = newPagos[index];
+    newPagos[index] = { ...anterior, [field]: value };
+    // Al pasar de/hacia dólares se conserva el valor en pesos
+    if (
+      field === "metodo" &&
+      esUSD(anterior) !== (value === "usd") &&
+      anterior.monto !== ""
+    ) {
+      newPagos[index].monto = desdePesos(value, pesosDe(anterior));
+    }
     setPagos(newPagos);
   };
 
-  const totalPagado = pagos.reduce(
-    (acc, p) => acc + (parseFloat(p.monto) || 0),
-    0,
-  );
-  const diferencia = pagoMixto ? totalPagado - saldo : null;
+  const hayUSD = pagos.some(esUSD);
+  const totalPagado = pagos.reduce((acc, p) => acc + pesosDe(p), 0);
+  const enEfectivo = pagos
+    .filter((p) => p.metodo === "efectivo" || p.metodo === "usd")
+    .reduce((acc, p) => acc + pesosDe(p), 0);
+  const diferencia = pagoMixto || hayUSD ? totalPagado - saldo : null;
+  const vuelto = hayUSD && diferencia > 0.005 ? diferencia : null;
+  // Mixto: tiene que cubrir el saldo (sin dólares, justo; con dólares puede
+  // sobrar, y el vuelto solo sale de efectivo o dólares).
+  const mixtoInvalido =
+    pagoMixto &&
+    (diferencia < -0.01 ||
+      (diferencia > 0.01 && (!hayUSD || diferencia > enEfectivo + 0.01)));
+  const sinCotizacion = hayUSD && !cotizacion.disponible;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (pagoMixto && Math.abs(diferencia) > 0.01) {
+    if (mixtoInvalido) {
       toast.error(
         `El total pagado (${formatCurrency(totalPagado)}) no coincide con el saldo (${formatCurrency(saldo)})`,
       );
       return;
     }
+    if (sinCotizacion) {
+      toast.error("No hay cotización del dólar disponible");
+      return;
+    }
     setLoading(true);
     try {
-      if (pagoMixto) {
-        for (const pago of pagos) {
-          if (parseFloat(pago.monto) > 0) {
-            await reparacionesService.agregarPago(reparacion.id, {
-              monto: parseFloat(pago.monto),
-              tipo: "total",
-              metodo: pago.metodo,
-            });
-          }
-        }
-      } else {
+      // Los dólares se cobran al final: así lo que sobra del saldo, ya
+      // cubierto por los otros medios, queda como vuelto.
+      const aCobrar = [...pagos]
+        .filter((p) => parseFloat(p.monto) > 0)
+        .sort((a, b) => Number(esUSD(a)) - Number(esUSD(b)));
+      for (const pago of aCobrar) {
         await reparacionesService.agregarPago(reparacion.id, {
-          monto: parseFloat(pagos[0].monto),
+          monto: parseFloat(pago.monto),
           tipo: "total",
-          metodo: pagos[0].metodo,
+          metodo: pago.metodo,
         });
       }
-      toast.success("Pago registrado");
+      toast.success(
+        vuelto ? `Pago registrado. Vuelto: ${formatCurrency(vuelto)}` : "Pago registrado",
+      );
       onSave();
     } catch (error) {
-      toast.error("Error al registrar pago");
+      toast.error(error.response?.data?.detail || "Error al registrar pago");
     } finally {
       setLoading(false);
     }
@@ -1041,7 +1117,9 @@ function PagoModal({ reparacion, onClose, onSave }) {
                   }
                   className="px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  {METODOS_PAGO.map((m) => (
+                  {METODOS_PAGO.filter(
+                    (m) => m.value !== "usd" || cotizacion.disponible,
+                  ).map((m) => (
                     <option key={m.value} value={m.value}>
                       {m.label}
                     </option>
@@ -1051,17 +1129,32 @@ function PagoModal({ reparacion, onClose, onSave }) {
                   value={pago.monto}
                   onChange={(v) =>
                     handlePagoChange(index, "monto", v)}
-                  placeholder="$ 0.00"
+                  placeholder={esUSD(pago) ? "US$ 0.00" : "$ 0.00"}
                   className="px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+                {esUSD(pago) && (
+                  <p className="col-span-2 text-xs text-gray-500">
+                    Equivale a{" "}
+                    <span className="font-medium text-gray-700">
+                      {formatCurrency(pesosDe(pago))}
+                    </span>{" "}
+                    (dólar blue {formatCurrency(cotizacion.venta || 0)})
+                  </p>
+                )}
               </div>
             ))}
           </div>
 
+          {vuelto && (
+            <p className="text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">
+              Vuelto en pesos: {formatCurrency(vuelto)}
+            </p>
+          )}
+
           {pagoMixto && (
             <div
               className={`flex justify-between text-sm px-3 py-2 rounded-xl ${
-                Math.abs(diferencia) < 0.01
+                !mixtoInvalido
                   ? "bg-green-50 text-green-700"
                   : diferencia > 0
                     ? "bg-yellow-50 text-yellow-700"
@@ -1069,13 +1162,13 @@ function PagoModal({ reparacion, onClose, onSave }) {
               }`}
             >
               <span>
-                {Math.abs(diferencia) < 0.01
+                {!mixtoInvalido
                   ? "✓ Monto correcto"
                   : diferencia > 0
                     ? "Excede el saldo"
                     : "Falta completar"}
               </span>
-              {Math.abs(diferencia) >= 0.01 && (
+              {mixtoInvalido && (
                 <span className="font-bold">
                   {formatCurrency(Math.abs(diferencia))}
                 </span>
@@ -1418,7 +1511,7 @@ function FilaReparacion({
                         className="flex justify-between text-xs text-gray-600 py-1"
                       >
                         <span>
-                          {p.tipo} — {p.metodo} — {formatDateTime(p.fecha)}
+                          {p.tipo} — {etiquetaPago(p)} — {formatDateTime(p.fecha)}
                         </span>
                         <span className="font-medium">
                           {formatCurrency(p.monto)}
@@ -1618,7 +1711,7 @@ function CardReparacionMobile({
                   className="flex justify-between text-xs text-gray-600"
                 >
                   <span>
-                    {p.tipo} — {p.metodo}
+                    {p.tipo} — {etiquetaPago(p)}
                   </span>
                   <span className="font-medium">{formatCurrency(p.monto)}</span>
                 </div>

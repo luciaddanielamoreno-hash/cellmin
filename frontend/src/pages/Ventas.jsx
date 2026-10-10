@@ -21,6 +21,7 @@ import { productosService } from "../services/productos.service";
 import { clientesService } from "../services/clientes.service";
 import toast from "react-hot-toast";
 import PrecioUSD from "../components/ui/PrecioUSD";
+import { useCotizacion } from "../hooks/useCotizacion";
 import MenuAcciones from "../components/ui/MenuAcciones";
 import {
   formatCurrency,
@@ -125,6 +126,7 @@ function NuevaVentaModal({ onClose, onSave }) {
   const [pagos, setPagos] = useState([{ metodo: "efectivo", monto: 0 }]);
   const [loading, setLoading] = useState(false);
   const [montoEditado, setMontoEditado] = useState(false);
+  const cotizacion = useCotizacion();
 
   useEffect(() => {
     Promise.all([productosService.getAll(), clientesService.getAll()]).then(
@@ -269,27 +271,56 @@ function NuevaVentaModal({ onClose, onSave }) {
         ? subtotal + montoAjuste
         : subtotal;
 
-  const totalPagado = pagoMixto
-    ? pagos.reduce((acc, p) => acc + (parseFloat(p.monto) || 0), 0)
-    : null;
+  // Con medio "dólares" el monto de la línea es en US$. Todo se compara en
+  // pesos con la cotización (dólar blue venta); lo que sobra es el vuelto.
+  const esUSD = (p) => p.metodo === "usd";
+  const pesosDe = (p) =>
+    esUSD(p)
+      ? (cotizacion.aPesos(parseFloat(p.monto) || 0) ?? 0)
+      : parseFloat(p.monto) || 0;
+  // Pesos -> monto de la línea (los dólares se redondean hacia arriba al centavo)
+  const desdePesos = (metodo, pesos) =>
+    metodo === "usd"
+      ? Math.ceil((cotizacion.aUSD(pesos) ?? 0) * 100 - 1e-9) / 100
+      : Math.round(pesos * 100) / 100;
+
+  const hayUSD = pagos.some(esUSD);
+  const esCobroEnEfectivo =
+    !pagoMixto && (pagos[0]?.metodo === "efectivo" || pagos[0]?.metodo === "usd");
+  const pagadoPesos = pagos.reduce((acc, p) => acc + pesosDe(p), 0);
+  const diferencia = pagadoPesos - total; // > 0 sobra, < 0 falta
+  const enEfectivo = pagos
+    .filter((p) => p.metodo === "efectivo" || p.metodo === "usd")
+    .reduce((acc, p) => acc + pesosDe(p), 0);
+
   const vuelto =
-    !pagoMixto && pagos[0]?.metodo === "efectivo"
-      ? (parseFloat(pagos[0]?.monto) || 0) - total
+    (esCobroEnEfectivo || (pagoMixto && hayUSD)) && diferencia > 0.005
+      ? Math.round(diferencia * 100) / 100
       : null;
+  const faltaCobrar =
+    (esCobroEnEfectivo || pagoMixto) && diferencia < -0.01 ? -diferencia : null;
+  // Mixto sin dólares: tiene que dar justo. Con dólares puede sobrar, pero el
+  // vuelto solo puede salir de lo cobrado en efectivo o en dólares.
+  const mixtoExcede =
+    pagoMixto &&
+    diferencia > 0.01 &&
+    (!hayUSD || diferencia > enEfectivo + 0.01);
+  const sinCotizacion = hayUSD && !cotizacion.disponible;
 
   useEffect(() => {
-    if (!pagoMixto && pagos[0]?.metodo === "efectivo" && !montoEditado) {
-      setPagos([{ ...pagos[0], monto: Math.round(total * 100) / 100 }]);
+    const p = pagos[0];
+    if (!pagoMixto && (p?.metodo === "efectivo" || p?.metodo === "usd") && !montoEditado) {
+      const sugerido = desdePesos(p.metodo, total);
+      if (sugerido !== p.monto) setPagos([{ ...p, monto: sugerido }]);
     }
-  }, [total, pagoMixto, pagos[0]?.metodo, montoEditado]);
+  }, [total, pagoMixto, pagos[0]?.metodo, montoEditado, cotizacion.venta]);
 
-  const recibido = parseFloat(pagos[0]?.monto) || 0;
-  const faltaEfectivo =
-    !pagoMixto && pagos[0]?.metodo === "efectivo" && recibido < total - 0.01;
-  const mixtoInvalido =
-    pagoMixto && totalPagado !== null && Math.abs(totalPagado - total) > 0.01;
   const puedeConfirmar =
-    carrito.length > 0 && !loading && !faltaEfectivo && !mixtoInvalido;
+    carrito.length > 0 &&
+    !loading &&
+    faltaCobrar === null &&
+    !mixtoExcede &&
+    !sinCotizacion;
 
   const handlePagoChange = (index, field, value) => {
     if (!pagoMixto) {
@@ -297,14 +328,21 @@ function NuevaVentaModal({ onClose, onSave }) {
       if (field === "metodo") setMontoEditado(false);
     }
     const newPagos = [...pagos];
-    newPagos[index] = { ...newPagos[index], [field]: value };
+    const anterior = newPagos[index];
+    newPagos[index] = { ...anterior, [field]: value };
+    // Si se cambia entre dólares y otro medio, se conserva el valor en pesos
+    if (field === "metodo" && esUSD(anterior) !== (value === "usd")) {
+      newPagos[index].monto = pagoMixto
+        ? desdePesos(value, pesosDe(anterior))
+        : 0;
+    }
     // Pago mixto con 2 medios: el otro se autocompleta con lo que falta
-    if (pagoMixto && field === "monto" && newPagos.length === 2) {
+    if (pagoMixto && newPagos.length === 2 && (field === "monto" || field === "metodo")) {
       const otro = index === 0 ? 1 : 0;
-      const resto = Math.max(0, total - (parseFloat(value) || 0));
+      const resto = Math.max(0, total - pesosDe(newPagos[index]));
       newPagos[otro] = {
         ...newPagos[otro],
-        monto: Math.round(resto * 100) / 100,
+        monto: desdePesos(newPagos[otro].metodo, resto),
       };
     }
     setPagos(newPagos);
@@ -329,17 +367,19 @@ function NuevaVentaModal({ onClose, onSave }) {
       toast.error("Agregá al menos un producto");
       return;
     }
-    if (pagoMixto && Math.abs(totalPagado - total) > 0.01) {
-      toast.error(
-        `El total pagado (${formatCurrency(totalPagado)}) no coincide con el total (${formatCurrency(total)})`,
-      );
+    if (!puedeConfirmar) {
+      toast.error("Revisá el pago: no coincide con el total a cobrar");
       return;
     }
     setLoading(true);
     try {
       const metodo_pago = pagoMixto
         ? pagos
-            .map((p) => `${p.metodo}: ${formatCurrency(p.monto)}`)
+            .map((p) =>
+              esUSD(p)
+                ? `usd: US$ ${p.monto}`
+                : `${p.metodo}: ${formatCurrency(p.monto)}`,
+            )
             .join(" + ")
         : pagos[0].metodo;
       const data = {
@@ -364,7 +404,11 @@ function NuevaVentaModal({ onClose, onSave }) {
         })),
       };
       const result = await ventasService.create(data);
-      toast.success(`Venta ${result.numero_venta} registrada`);
+      toast.success(
+        result.vuelto > 0
+          ? `Venta ${result.numero_venta} registrada. Vuelto: ${formatCurrency(result.vuelto)}`
+          : `Venta ${result.numero_venta} registrada`,
+      );
       onSave();
     } catch (error) {
       toast.error(
@@ -655,30 +699,67 @@ function NuevaVentaModal({ onClose, onSave }) {
                     }
                     className={inputBase}
                   >
-                    {METODOS_PAGO.map((m) => (
+                    {METODOS_PAGO.filter(
+                      (m) => m.value !== "usd" || cotizacion.disponible,
+                    ).map((m) => (
                       <option key={m.value} value={m.value}>
                         {m.label}
                       </option>
                     ))}
                   </select>
-                  {(pagoMixto || pago.metodo === "efectivo") && (
+                  {(pagoMixto ||
+                    pago.metodo === "efectivo" ||
+                    pago.metodo === "usd") && (
                     <div className="relative">
                       <InputNumero
                         value={pago.monto}
-                        onChange={(v) =>
-                          handlePagoChange(index, "monto", v)}
-                        placeholder={pagoMixto ? "Monto" : "Recibido"}
+                        onChange={(v) => handlePagoChange(index, "monto", v)}
+                        placeholder={
+                          pagoMixto
+                            ? esUSD(pago)
+                              ? "US$"
+                              : "Monto"
+                            : "Recibido"
+                        }
                         className={inputBase}
                       />
-                      {!pagoMixto && (
-                        <span className="absolute -top-2 left-3 px-1 bg-gray-50 text-[10px] text-gray-500">
-                          Recibido
-                        </span>
-                      )}
+                      <span className="absolute -top-2 left-3 px-1 bg-gray-50 text-[10px] text-gray-500">
+                        {esUSD(pago)
+                          ? "Recibido en US$"
+                          : pagoMixto
+                            ? "Monto en $"
+                            : "Recibido"}
+                      </span>
                     </div>
+                  )}
+                  {esUSD(pago) && (
+                    <p className="col-span-2 text-xs text-gray-500">
+                      Equivale a{" "}
+                      <span className="font-medium text-gray-700">
+                        {formatCurrency(pesosDe(pago))}
+                      </span>{" "}
+                      (dólar blue {formatCurrency(cotizacion.venta || 0)})
+                    </p>
                   )}
                 </div>
               ))}
+              {vuelto !== null && hayUSD && (
+                <p className="text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">
+                  El vuelto de {formatCurrency(vuelto)} se entrega en pesos.
+                </p>
+              )}
+              {mixtoExcede && (
+                <p className="text-xs text-yellow-700 bg-yellow-50 rounded-lg px-3 py-2">
+                  {hayUSD
+                    ? "El vuelto solo puede salir de lo cobrado en efectivo o en dólares."
+                    : "Los montos superan el total a cobrar."}
+                </p>
+              )}
+              {sinCotizacion && (
+                <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">
+                  No hay cotización del dólar disponible: no se puede cobrar en dólares.
+                </p>
+              )}
             </div>
 
             <div>
@@ -734,33 +815,27 @@ function NuevaVentaModal({ onClose, onSave }) {
               <PrecioUSD pesos={total} />
             </div>
             <div>
-              {vuelto !== null && vuelto >= 0 && (
+              {vuelto !== null && (
                 <>
-                  <p className="text-xs text-gray-500">Vuelto</p>
+                  <p className="text-xs text-gray-500">Vuelto (en pesos)</p>
                   <p className="font-bold text-green-600">
                     {formatCurrency(vuelto)}
                   </p>
                 </>
               )}
-              {faltaEfectivo && (
+              {faltaCobrar !== null && (
                 <>
                   <p className="text-xs text-red-500">Falta cobrar</p>
                   <p className="font-bold text-red-600">
-                    {formatCurrency(total - recibido)}
+                    {formatCurrency(faltaCobrar)}
                   </p>
                 </>
               )}
-              {mixtoInvalido && (
+              {mixtoExcede && (
                 <>
-                  <p
-                    className={`text-xs ${totalPagado > total ? "text-yellow-600" : "text-red-500"}`}
-                  >
-                    {totalPagado > total ? "Excede el total" : "Falta pagar"}
-                  </p>
-                  <p
-                    className={`font-bold ${totalPagado > total ? "text-yellow-600" : "text-red-600"}`}
-                  >
-                    {formatCurrency(Math.abs(totalPagado - total))}
+                  <p className="text-xs text-yellow-600">Excede el total</p>
+                  <p className="font-bold text-yellow-600">
+                    {formatCurrency(diferencia)}
                   </p>
                 </>
               )}

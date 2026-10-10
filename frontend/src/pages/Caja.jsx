@@ -17,9 +17,11 @@ import Paginacion from "../components/ui/Paginacion";
 import ThOrdenable from "../components/ui/ThOrdenable";
 import { useTabla } from "../hooks/useTabla";
 import { useAuth } from "../context/AuthContext";
+import { useCotizacion } from "../hooks/useCotizacion";
 import {
   formatCurrency,
   formatDateTime,
+  formatUSD,
   parsearMoneda,
 } from "../utils/helpers";
 
@@ -29,14 +31,33 @@ const CONCEPTOS_MOV = {
   manual: "Movimientos manuales",
   cobro_reparacion: "Cobros de reparaciones",
   cancelacion_venta: "Ventas canceladas (devoluciones)",
+  vuelto: "Vueltos entregados (en pesos)",
   devolucion_reparacion: "Devoluciones de reparaciones",
 };
 const grupoMovimiento = (m) => {
   if (m.concepto === "cancelacion_venta") return "cancelacion_venta";
   if (m.concepto === "devolucion_reparacion") return "devolucion_reparacion";
+  if (m.concepto === "vuelto") return "vuelto";
   if (m.concepto === "reparacion") return "cobro_reparacion";
   return "manual";
 };
+const etiquetaConcepto = (m) =>
+  m.concepto === "venta"
+    ? "Venta"
+    : m.concepto === "reparacion"
+      ? "Reparación"
+      : m.concepto === "cancelacion_venta"
+        ? "Cancelación"
+        : m.concepto === "devolucion_reparacion"
+          ? "Devolución"
+          : m.concepto === "vuelto"
+            ? "Vuelto"
+            : m.tipo === "ingreso"
+              ? "Ingreso"
+              : "Egreso";
+const etiquetaMetodo = (m) =>
+  m === "usd" ? "Dólares" : m ? m.charAt(0).toUpperCase() + m.slice(1) : "-";
+
 const totalesMovimientos = (movs = []) => {
   const t = {};
   movs.forEach((m) => {
@@ -229,7 +250,9 @@ function CerrarCajaModal({ caja, onClose, onSave }) {
     { key: "transferencia", label: "Transferencia" },
     { key: "debito", label: "Débito" },
     { key: "credito", label: "Crédito" },
+    { key: "usd", label: "Dólares (US$)" },
   ];
+  const cotizacion = useCotizacion();
 
   const [montos, setMontos] = useState(
     METODOS.map((m) => ({ metodo: m.key, monto: "", display: "" })),
@@ -242,44 +265,29 @@ function CerrarCajaModal({ caja, onClose, onSave }) {
     (acc, m) => (m.tipo === "ingreso" ? acc + m.monto : acc - m.monto),
     0,
   );
+  const excedenteVentas = caja.excedente_ventas || 0;
   const montoEsperadoTotal =
+    caja.esperado_total ??
     caja.monto_inicial + (caja.total_ventas_hoy || 0) + totalMovimientos;
 
   // Calcular esperado por método basado en ventas y movimientos
-  const esperadoPorMetodo = () => {
-    const result = {
-      efectivo: caja.monto_inicial,
-      transferencia: 0,
-      debito: 0,
-      credito: 0,
-    };
-
-    // Sumar ventas por método
-    if (caja.movimientos_completos) {
-      caja.movimientos_completos.forEach((m) => {
-        if (m.concepto === "venta" || m.concepto === "reparacion") {
-          const metodo = m.metodo_pago?.toLowerCase();
-          if (metodo && result.hasOwnProperty(metodo)) {
-            result[metodo] = (result[metodo] || 0) + m.monto;
-          }
-        } else if (
-          m.concepto === "manual" ||
-          m.concepto === "devolucion_reparacion" ||
-          m.concepto === "cancelacion_venta"
-        ) {
-          const metodo = m.metodo_pago?.toLowerCase();
-          if (metodo && result.hasOwnProperty(metodo)) {
-            result[metodo] =
-              (result[metodo] || 0) +
-              (m.tipo === "ingreso" ? m.monto : -m.monto);
-          }
-        }
-      });
-    }
-    return result;
-  };
-
+  // El esperado por método lo calcula el servidor (en pesos). Los dólares se
+  // cuentan en billetes (US$) y se valúan al promedio con que se cobraron.
+  const esperadoPorMetodo = () => ({
+    efectivo: caja.monto_inicial,
+    transferencia: 0,
+    debito: 0,
+    credito: 0,
+    usd: 0,
+    ...(caja.esperado_por_metodo || {}),
+  });
   const esperado = esperadoPorMetodo();
+  const esperadoUSD = caja.esperado_usd || 0;
+  const tasaUSD =
+    esperadoUSD > 0 ? (esperado.usd || 0) / esperadoUSD : cotizacion.venta || 0;
+  // lo contado en dólares, expresado en pesos
+  const valorEnPesos = (clave, monto) =>
+    clave === "usd" ? monto * tasaUSD : monto;
 
   const handleMontoChange = (index, valor) => {
     const limpio = valor.replace(/[^\d,]/g, "");
@@ -298,7 +306,10 @@ function CerrarCajaModal({ caja, onClose, onSave }) {
     setMontos(newMontos);
   };
 
-  const totalReal = montos.reduce((acc, m) => acc + (m.monto || 0), 0);
+  const totalReal = montos.reduce(
+    (acc, m) => acc + valorEnPesos(m.metodo, m.monto || 0),
+    0,
+  );
   const efectivoContado = montos.find((m) => m.metodo === "efectivo")?.monto || 0;
   const excedeDejar = dejar.monto > efectivoContado + 0.001;
 
@@ -324,7 +335,10 @@ function CerrarCajaModal({ caja, onClose, onSave }) {
     });
 
   const diferenciaPorMetodo = METODOS.map((m) => {
-    const montoIngresado = montos.find((mo) => mo.metodo === m.key)?.monto || 0;
+    const montoIngresado = valorEnPesos(
+      m.key,
+      montos.find((mo) => mo.metodo === m.key)?.monto || 0,
+    );
     const montoEsperado = esperado[m.key] || 0;
     return {
       metodo: m.key,
@@ -388,6 +402,16 @@ function CerrarCajaModal({ caja, onClose, onSave }) {
                 + {formatCurrency(caja.total_ventas_hoy || 0)}
               </span>
             </div>
+            {excedenteVentas > 0.001 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">
+                  Dólares cobrados de más (vuelto)
+                </span>
+                <span className="font-medium text-green-600">
+                  + {formatCurrency(excedenteVentas)}
+                </span>
+              </div>
+            )}
             {Object.entries(totalesMovimientos(caja.movimientos))
               .filter(([, v]) => Math.abs(v) > 0.001)
               .map(([g, v]) => (
@@ -426,47 +450,60 @@ function CerrarCajaModal({ caja, onClose, onSave }) {
             <p className="text-sm font-medium text-gray-700">
               Ingresá el monto contado por método
             </p>
-            {METODOS.map((m, index) => (
-              <div key={m.key} className="flex items-center gap-3">
-                <div className="w-28 shrink-0">
-                  <p className="text-sm text-gray-600">{m.label}</p>
-                  <p className="text-xs text-gray-400">
-                    Esp: {formatCurrency(esperado[m.key] || 0)}
-                  </p>
-                </div>
-                <div className="relative flex-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-medium">
-                    $
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={montos[index].display}
-                    onChange={(e) => handleMontoChange(index, e.target.value)}
-                    placeholder="0"
-                    className="w-full pl-7 pr-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                {montos[index].monto > 0 && (
-                  <div
-                    className={`text-xs font-medium w-20 text-right ${
-                      Math.abs(montos[index].monto - (esperado[m.key] || 0)) <
-                      0.01
-                        ? "text-green-600"
-                        : montos[index].monto > (esperado[m.key] || 0)
-                          ? "text-blue-600"
-                          : "text-red-600"
-                    }`}
-                  >
-                    {montos[index].monto === (esperado[m.key] || 0)
-                      ? "✓ OK"
-                      : montos[index].monto > (esperado[m.key] || 0)
-                        ? `+${formatCurrency(montos[index].monto - (esperado[m.key] || 0))}`
-                        : `-${formatCurrency((esperado[m.key] || 0) - montos[index].monto)}`}
+            {METODOS.map((m, index) => {
+              const esUSD = m.key === "usd";
+              // esperado en la unidad en que se cuenta (US$ para dólares)
+              const esp = esUSD ? esperadoUSD : esperado[m.key] || 0;
+              const contado = montos[index].monto || 0;
+              const fmt = esUSD ? formatUSD : formatCurrency;
+              const dif = Math.round((contado - esp) * 100) / 100;
+              return (
+                <div key={m.key} className="flex items-center gap-3">
+                  <div className="w-28 shrink-0">
+                    <p className="text-sm text-gray-600">{m.label}</p>
+                    <p className="text-xs text-gray-400">Esp: {fmt(esp)}</p>
                   </div>
-                )}
-              </div>
-            ))}
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-medium">
+                      {esUSD ? "US$" : "$"}
+                    </span>
+                    <input
+                      type="text"
+                      inputMode={esUSD ? "decimal" : "numeric"}
+                      value={montos[index].display}
+                      onChange={(e) => handleMontoChange(index, e.target.value)}
+                      placeholder="0"
+                      className={`w-full ${esUSD ? "pl-10" : "pl-7"} pr-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                    />
+                  </div>
+                  {contado > 0 && (
+                    <div
+                      className={`text-xs font-medium w-20 text-right ${
+                        Math.abs(dif) < 0.01
+                          ? "text-green-600"
+                          : dif > 0
+                            ? "text-blue-600"
+                            : "text-red-600"
+                      }`}
+                    >
+                      {Math.abs(dif) < 0.01
+                        ? "✓ OK"
+                        : dif > 0
+                          ? `+${fmt(dif)}`
+                          : `-${fmt(-dif)}`}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {tasaUSD > 0 && (esperadoUSD > 0 || montos.find((m) => m.metodo === "usd")?.monto > 0) && (
+              <p className="text-xs text-gray-400">
+                Los dólares se valúan a {formatCurrency(tasaUSD)} cada uno
+                {esperadoUSD > 0
+                  ? " (promedio con el que se cobraron)."
+                  : " (dólar blue actual)."}
+              </p>
+            )}
           </div>
 
           {/* Efectivo que queda en la caja para mañana */}
@@ -750,6 +787,7 @@ function ResumenCierre({ resultado, onClose }) {
     transferencia: "Transferencia",
     debito: "Débito",
     credito: "Crédito",
+    usd: "Dólares (US$)",
   };
 
   return (
@@ -860,6 +898,16 @@ function ResumenCierre({ resultado, onClose }) {
                           {metodosLabel[metodo] || metodo}
                         </span>
                         <div className="text-right space-y-0.5">
+                          {metodo === "usd" && resultado.usd_esperado != null && (
+                            <>
+                              <p className="text-xs text-gray-500">
+                                Esperado: {formatUSD(resultado.usd_esperado)}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                Contado: {formatUSD(resultado.usd_contado || 0)}
+                              </p>
+                            </>
+                          )}
                           <p className="text-xs text-gray-500">
                             Esperado: {formatCurrency(esperado)}
                           </p>
@@ -941,8 +989,9 @@ export default function Caja() {
 
   const totalVentasHoy = caja?.total_ventas_hoy || 0;
   const saldoActual = cajaAbierta
-    ? caja.monto_inicial + totalVentasHoy + totalMovimientos
+    ? (caja.esperado_total ?? caja.monto_inicial + totalVentasHoy + totalMovimientos)
     : 0;
+  const dolaresEnCaja = cajaAbierta ? caja.esperado_usd || 0 : 0;
 
   const historialFiltrado = historial
     .filter((c) => c.estado === "cerrada")
@@ -1084,6 +1133,11 @@ export default function Caja() {
                   <p className="text-2xl font-bold text-white mt-1">
                     {formatCurrency(saldoActual)}
                   </p>
+                  {dolaresEnCaja > 0 && (
+                    <p className="text-xs text-blue-100 mt-1">
+                      Incluye {formatUSD(dolaresEnCaja)} en billetes
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -1128,25 +1182,16 @@ export default function Caja() {
                                           : "bg-red-100 text-red-700"
                                   }`}
                                 >
-                                  {m.concepto === "venta"
-                                    ? "Venta"
-                                    : m.concepto === "reparacion"
-                                      ? "Reparación"
-                                      : m.concepto === "devolucion_reparacion" ||
-                                        m.concepto === "cancelacion_venta"
-                                        ? m.concepto === "cancelacion_venta"
-                                          ? "Cancelación"
-                                          : "Devolución"
-                                        : m.tipo === "ingreso"
-                                          ? "Ingreso"
-                                          : "Egreso"}
+                                  {etiquetaConcepto(m)}
                                 </span>
                               </td>
                               <td className="px-6 py-3 text-sm text-gray-700">
                                 {m.descripcion}
                               </td>
                               <td className="px-6 py-3 text-sm text-gray-600">
-                                {m.metodo_pago || "-"}
+                                {m.metodo_pago && m.metodo_pago.includes(":")
+                                  ? m.metodo_pago
+                                  : etiquetaMetodo(m.metodo_pago)}
                               </td>
                               <td
                                 className={`px-6 py-3 text-sm font-semibold ${
@@ -1157,6 +1202,12 @@ export default function Caja() {
                               >
                                 {m.tipo === "ingreso" ? "+" : "-"}
                                 {formatCurrency(m.monto)}
+                                {m.monto_usd > 0 && (
+                                  <span className="block text-xs font-normal text-gray-400">
+                                    {formatUSD(m.monto_usd)}{" "}
+                                    {m.tipo === "ingreso" ? "recibidos" : "devueltos"}
+                                  </span>
+                                )}
                               </td>
                               <td className="px-6 py-3 text-sm text-gray-500">
                                 {m.fecha ? formatDateTime(m.fecha) : "-"}
@@ -1187,18 +1238,7 @@ export default function Caja() {
                                         : "bg-red-100 text-red-700"
                                 }`}
                               >
-                                {m.concepto === "venta"
-                                  ? "Venta"
-                                  : m.concepto === "reparacion"
-                                    ? "Reparación"
-                                    : m.concepto === "devolucion_reparacion" ||
-                                      m.concepto === "cancelacion_venta"
-                                      ? m.concepto === "cancelacion_venta"
-                                        ? "Cancelación"
-                                        : "Devolución"
-                                      : m.tipo === "ingreso"
-                                        ? "Ingreso"
-                                        : "Egreso"}
+                                {etiquetaConcepto(m)}
                               </span>
                             </div>
                             <p className="text-sm text-gray-700">
@@ -1338,6 +1378,39 @@ export default function Caja() {
                         </p>
                       </div>
                     </div>
+
+                    {(c.usd_esperado > 0 || c.usd_contado > 0) && (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="bg-gray-50 rounded-xl p-3">
+                          <p className="text-xs text-gray-500">Dólares esperados</p>
+                          <p className="font-semibold text-gray-800">
+                            {formatUSD(c.usd_esperado || 0)}
+                          </p>
+                        </div>
+                        <div className="bg-gray-50 rounded-xl p-3">
+                          <p className="text-xs text-gray-500">Dólares contados</p>
+                          <p className="font-semibold text-gray-800">
+                            {formatUSD(c.usd_contado || 0)}
+                          </p>
+                        </div>
+                        <div className="bg-gray-50 rounded-xl p-3">
+                          <p className="text-xs text-gray-500">Diferencia en dólares</p>
+                          <p
+                            className={`font-semibold ${
+                              Math.abs(c.usd_diferencia || 0) < 0.01
+                                ? "text-green-600"
+                                : c.usd_diferencia > 0
+                                  ? "text-blue-600"
+                                  : "text-red-600"
+                            }`}
+                          >
+                            {Math.abs(c.usd_diferencia || 0) < 0.01
+                              ? "Sin diferencia"
+                              : `${c.usd_diferencia > 0 ? "+" : "-"}${formatUSD(Math.abs(c.usd_diferencia))}`}
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
                     {(c.monto_dejado != null ||
                       c.monto_esperado_apertura != null) && (

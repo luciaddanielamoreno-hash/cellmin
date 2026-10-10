@@ -6,6 +6,7 @@ from app.utils.permissions import check_permission
 from bson import ObjectId
 from datetime import datetime
 from app.utils.logger import registrar_auditoria
+from app.utils.idempotencia import resultado_previo, reclamar_clave, guardar_resultado, liberar_clave
 from app.utils.pagos import (
     METODOS_VALIDOS,
     USD,
@@ -62,6 +63,11 @@ async def create_sale(sale: SaleCreate, current_user: dict = Depends(get_current
     check_permission(current_user["role"], "ventas:create")
     db = get_db()
 
+    # Reenvio de una venta que ya se registró: devolver el mismo resultado
+    ya_hecha = await resultado_previo(db, sale.clave_idempotencia, "venta")
+    if ya_hecha:
+        return ya_hecha
+
     # 1. Validaciones básicas del pedido
     if not sale.items:
         raise HTTPException(status_code=400, detail="La venta no tiene productos")
@@ -70,6 +76,17 @@ async def create_sale(sale: SaleCreate, current_user: dict = Depends(get_current
     porcentaje = 0.0 if sale.tipo_ajuste == "ninguno" else sale.porcentaje_ajuste
     if porcentaje < 0 or porcentaje > 100:
         raise HTTPException(status_code=400, detail="El porcentaje debe estar entre 0 y 100")
+
+    # Toda venta se registra dentro de una caja abierta de la sucursal
+    sucursales_usuario = current_user.get("sucursales") or []
+    if sucursales_usuario and sale.sucursal not in sucursales_usuario:
+        raise HTTPException(status_code=403, detail="No tenés acceso a esa sucursal")
+    caja_cobro = await db.cajas.find_one({"estado": "abierta", "sucursal": sale.sucursal})
+    if not caja_cobro:
+        raise HTTPException(
+            status_code=400,
+            detail="Para registrar ventas hace falta una caja abierta en la sucursal. Abrí la caja y volvé a intentar.",
+        )
 
     # 2. Tomar precios y nombres de la base de datos (nunca del frontend)
     #    y validar el stock ANTES de escribir nada
@@ -149,7 +166,6 @@ async def create_sale(sale: SaleCreate, current_user: dict = Depends(get_current
     #    vuelto, que se entrega en pesos.
     vuelto = 0.0
     cotizacion = None
-    caja_cobro = None
     if sale.pagos:
         for p in sale.pagos:
             if p.metodo not in METODOS_VALIDOS:
@@ -157,12 +173,6 @@ async def create_sale(sale: SaleCreate, current_user: dict = Depends(get_current
         usa_usd = any(p.metodo == USD for p in sale.pagos)
         if usa_usd:
             cotizacion = await cotizacion_para_cobro(db)
-            caja_cobro = await db.cajas.find_one({"estado": "abierta", "sucursal": sale.sucursal})
-            if not caja_cobro:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Para cobrar en dólares hace falta una caja abierta, donde se registran los billetes recibidos.",
-                )
 
         if len(sale.pagos) == 1 and not usa_usd:
             metodo_pago = sale.pagos[0].metodo
@@ -222,7 +232,22 @@ async def create_sale(sale: SaleCreate, current_user: dict = Depends(get_current
         metodo_pago = sale.metodo_pago
         pagos_venta = [{"metodo": metodo_pago, "monto": total}]
 
-    # 5. Registrar la venta
+    # 5. Registrar la venta (una sola vez por clave: un doble click no duplica)
+    previa = await reclamar_clave(db, sale.clave_idempotencia, "venta")
+    if previa:
+        return previa["resultado"]
+    try:
+        return await _registrar_venta(
+            db, sale, current_user, items_finales, subtotal, porcentaje, descuento,
+            interes, total, metodo_pago, pagos_venta, vuelto, cotizacion, caja_cobro,
+        )
+    except Exception:
+        await liberar_clave(db, sale.clave_idempotencia, "venta")
+        raise
+
+
+async def _registrar_venta(db, sale, current_user, items_finales, subtotal, porcentaje, descuento,
+                           interes, total, metodo_pago, pagos_venta, vuelto, cotizacion, caja_cobro):
     numero = await get_next_number(db, "ventas", "V-")
     new_sale = {
         "cliente_id": sale.cliente_id,
@@ -288,7 +313,9 @@ async def create_sale(sale: SaleCreate, current_user: dict = Depends(get_current
         descripcion=f"Venta registrada: {numero}",
     )
 
-    return {"message": "Venta registrada", "numero_venta": numero, "id": str(result.inserted_id), "total": total, "vuelto": vuelto}
+    respuesta = {"message": "Venta registrada", "numero_venta": numero, "id": str(result.inserted_id), "total": total, "vuelto": vuelto}
+    await guardar_resultado(db, sale.clave_idempotencia, "venta", respuesta)
+    return respuesta
 
 
 @router.put("/{sale_id}/cancel")

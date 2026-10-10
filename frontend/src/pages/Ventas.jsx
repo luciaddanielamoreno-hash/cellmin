@@ -1,6 +1,6 @@
 import { cajaService } from "../services/caja.service";
 import InputNumero from "../components/ui/InputNumero";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Plus,
   Search,
@@ -125,6 +125,13 @@ function NuevaVentaModal({ onClose, onSave }) {
   const [pagoMixto, setPagoMixto] = useState(false);
   const [pagos, setPagos] = useState([{ metodo: "efectivo", monto: 0 }]);
   const [loading, setLoading] = useState(false);
+  // Una clave por formulario abierto + bloqueo inmediato: un doble click no duplica la venta
+  const claveVenta = useRef(
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
+  const enviando = useRef(false);
   const [montoEditado, setMontoEditado] = useState(false);
   const cotizacion = useCotizacion();
 
@@ -371,6 +378,8 @@ function NuevaVentaModal({ onClose, onSave }) {
       toast.error("Revisá el pago: no coincide con el total a cobrar");
       return;
     }
+    if (enviando.current) return;
+    enviando.current = true;
     setLoading(true);
     try {
       const metodo_pago = pagoMixto
@@ -385,6 +394,7 @@ function NuevaVentaModal({ onClose, onSave }) {
       const data = {
         ...form,
         cliente_id: form.cliente_id || null,
+        clave_idempotencia: claveVenta.current,
         descuento: tipoAjuste === "descuento" ? montoAjuste : 0,
         total,
         tipo_ajuste: tipoAjuste,
@@ -415,6 +425,7 @@ function NuevaVentaModal({ onClose, onSave }) {
         error.response?.data?.detail || "Error al registrar la venta",
       );
     } finally {
+      enviando.current = false;
       setLoading(false);
     }
   };
@@ -843,7 +854,7 @@ function NuevaVentaModal({ onClose, onSave }) {
           </div>
           <button
             onClick={handleSubmit}
-            disabled={!puedeConfirmar}
+            disabled={!puedeConfirmar || loading}
             className="md:w-72 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition"
           >
             {loading

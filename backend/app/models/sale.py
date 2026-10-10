@@ -27,6 +27,7 @@ class SaleCreate(BaseModel):
     pagos: Optional[List[PagoVenta]] = None
     sucursal: str = "sucursal_1"
     notas: Optional[str] = None
+    clave_idempotencia: Optional[str] = None  # evita duplicar la venta por doble envio
 
 class SaleResponse(BaseModel):
     id: str
